@@ -1,0 +1,5 @@
+.venv/
+out/
+fonts/*/
+.DS_Store
+__pycache__/
