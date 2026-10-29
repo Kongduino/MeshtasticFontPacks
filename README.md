@@ -7,7 +7,7 @@ any device, from font packs installed at run time. Step 1 of the plan: the forma
 |---|---|
 | `SPEC.md` | The pack format (`.mfp`), version 2 |
 | `tools/mkfontpack.py` | Builds a pack from a TrueType/OpenType font: one pixel size, chosen code points |
-| `tools/upload_pack.py` | Installs a pack on a device (USB or TCP) with the protobuf API's XModem transfer, to `/fonts/` |
+| `tools/upload_pack.py` | Installs (or removes) a pack on a device, over USB or TCP, with the protobuf API's XModem transfer |
 | `c/fontpack.h`, `c/fontpack.c` | The reader, plain C99 with no allocation, for the firmware (and this test) |
 | `c/fpview.c` | Desktop test: pack info, a full read, text laid out on a screen of a given width |
 | `tests/` | UTF-8 decoder tests, and a corruption test (bad packs must never crash the reader) |
@@ -23,7 +23,8 @@ out/fpview -o out/hello.pbm out/cjk12.mfp "你好，世界！こんにちは 안
 python3 tools/upload_pack.py --port /dev/cu.usbmodem101 out/cjk12.mfp   # needs the meshtastic package
 ```
 
-The upload needs firmware with font pack support (step 2, below); it runs at about 1.1 KB/s over USB.
+The upload needs firmware with font pack support (below); it runs at about 8 KB/s over USB (a 320 KB pack in
+40 s).
 
 Version 2 stores a range in 3 bytes and a glyph in 1 (an index into a table of the distinct glyph metrics), with
 checkpoints every 64 entries: the same packs are 40 to 46% smaller than in version 1.
@@ -36,12 +37,14 @@ The test pack (Latin-1, CJK punctuation, kana, the 2350 common Hangul syllables 
 
 ## Firmware
 
-Step 2 (in progress, tested on a Station G2): branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`.
-Packs in `/fonts/*.mfp` are loaded at their first use and checked (CRC); text drawn through the emote renderer
-(messages, node names, notifications...) takes its missing glyphs from them, and a box (tofu) stands for the
-characters no pack has. Message lines wrap between CJK characters.
+Tested on a Station G2: branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`. Text drawn
+through the emote renderer (messages, node names, notifications...) takes the glyphs the built-in font lacks from
+the packs in `/fonts/*.mfp`, and a box (tofu) stands for the characters no pack has. Message lines wrap between
+CJK characters. A pack is checked (CRC) when it is installed and put in place even when the one it replaces is
+in use; an interrupted or damaged upload changes nothing (SPEC.md, "Installing").
 
-`upload_pack.py --remove NAME` deletes a pack. Next (step 3): replacing and removing packs that are in use, checking a pack once at install, a faster transfer.
+Next: font pack storage other than files (a `FontStore` write side for flash regions, EEPROM...), more sizes, the
+TFT (LVGL) screens, and a desktop pack builder.
 
 ## Licence
 

@@ -2,11 +2,11 @@
 """Install a font pack on a Meshtastic device, over the protobuf API's XModem file transfer.
 
   upload_pack.py --port /dev/cu.usbmodem101 out/cjk12.mfp
-  upload_pack.py --host 10.0.1.2 out/cjk12.mfp --reboot
+  upload_pack.py --host 10.0.1.2 out/cjk12.mfp
   upload_pack.py --port /dev/cu.usbmodem101 --remove cjk12.mfp
 
-The pack goes to /fonts/<name>.mfp. The device loads its packs at boot (until it can reload them by itself, use
---reboot). Needs the meshtastic Python package.
+The pack goes to /fonts/<name>.mfp: the device receives it into a partial file, checks it, then puts it in place
+(replacing a pack of the same name, even in use) and uses it without a reboot. Needs the meshtastic Python package.
 """
 import argparse, os, struct, sys, threading, time, zlib
 
@@ -33,10 +33,28 @@ def crc16_ccitt(data):
     return crc
 
 
+def on_log(line, interface):
+    """The device's font pack messages, when its API log is on (security.debug_log_api_enabled)."""
+    if "FontPacks" in line or "abandon" in line:
+        print("\r  device: " + line.strip())
+
+
 def on_xmodem(packet, interface):
     with reply_ready:
         replies.append(packet.control)
         reply_ready.notify()
+
+
+def send(iface, msg):
+    """Sends a ToRadio frame. Over serial, the library sleeps 100 ms after every write (StreamInterface._writeBytes),
+    which would make the transfer about 10 times slower: the frame goes to the port directly."""
+    from meshtastic.serial_interface import SerialInterface
+    if isinstance(iface, SerialInterface) and iface.stream:
+        b = msg.SerializeToString()
+        iface.stream.write(bytes([0x94, 0xC3, len(b) >> 8, len(b) & 0xFF]) + b)
+        iface.stream.flush()
+    else:
+        iface._sendToRadio(msg)
 
 
 def exchange(iface, control, seq=0, data=b""):
@@ -48,7 +66,7 @@ def exchange(iface, control, seq=0, data=b""):
     msg.xmodemPacket.crc16 = crc16_ccitt(data)
     with reply_ready:
         replies.clear()
-        iface._sendToRadio(msg)
+        send(iface, msg)
         if not reply_ready.wait_for(lambda: replies, TIMEOUT):
             return None
         return replies.pop(0)
@@ -71,14 +89,15 @@ def main():
     ap.add_argument("--host", help="TCP host (the device's IP address)")
     ap.add_argument("--name", help="file name on the device (default: the pack's file name)")
     ap.add_argument("--remove", metavar="NAME", help="remove the pack /fonts/NAME from the device instead")
-    ap.add_argument("--reboot", action="store_true", help="reboot the device afterwards, so it loads the pack")
+    ap.add_argument("--force", action="store_true", help="send the pack without checking it first (tests the device's check)")
     a = ap.parse_args()
 
     if a.remove:
         name = a.remove
     elif a.pack:
         data = open(a.pack, "rb").read()
-        check_pack(data)
+        if not a.force:
+            check_pack(data)
         name = a.name or os.path.basename(a.pack)
     else:
         sys.exit("give a pack to install, or --remove NAME")
@@ -93,13 +112,17 @@ def main():
         from meshtastic.serial_interface import SerialInterface
         iface = SerialInterface(devPath=a.port)
     pub.subscribe(on_xmodem, "meshtastic.xmodempacket")
+    pub.subscribe(on_log, "meshtastic.log.line")
     C = xmodem_pb2.XModem
     try:
         if a.remove:
-            # Starting a transfer replaces the file, cancelling it removes it (xmodem.cpp)
-            if exchange(iface, C.SOH, 0, target.encode()) != C.ACK or exchange(iface, C.CAN) != C.ACK:
-                sys.exit("the device didn't remove %s" % target)
-            print("removed", target)
+            # The device closes its packs before deleting the file (AdminModule, FontPacks::remove)
+            from meshtastic.protobuf import admin_pb2
+            msg = admin_pb2.AdminMessage()
+            msg.delete_file_request = target
+            iface.localNode._sendAdmin(msg)
+            time.sleep(1)
+            print("asked the device to remove", target)
             return
         reply = exchange(iface, C.SOH, 0, target.encode())
         if reply != C.ACK:
@@ -116,12 +139,13 @@ def main():
                 sys.exit("packet %d not acknowledged (%s): transfer cancelled" % (seq, reply))
             if seq % 50 == 0 or seq == len(chunks):
                 print("\r%s: %d / %d bytes" % (target, min(seq * CHUNK, len(data)), len(data)), end="", flush=True)
-        if exchange(iface, C.EOT) != C.ACK:
-            sys.exit("\nend of transfer not acknowledged")
+        # The device checks the pack (structure, CRC) and installs it before it acknowledges the end
+        reply = exchange(iface, C.EOT)
+        if reply == C.NAK:
+            sys.exit("\nthe device checked the pack and refused it: nothing changed on the device")
+        if reply != C.ACK:
+            sys.exit("\nend of transfer not acknowledged (%s)" % reply)
         print("\n%d bytes in %.0f s" % (len(data), time.time() - start))
-        if a.reboot:
-            iface.localNode.reboot(3)
-            print("the device reboots")
     finally:
         iface.close()
 

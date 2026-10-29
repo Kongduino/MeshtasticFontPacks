@@ -143,4 +143,10 @@ A reader treats a pack as untrusted data:
 
 ## Installing (firmware)
 
-A pack is uploaded with the XModem transfer of the protobuf API, to `/fonts/<name>.mfp`.
+A pack is uploaded with the XModem transfer of the protobuf API, to `/fonts/<name>.mfp`. The device receives
+it into `/fonts/<name>.mfp.part`, which the loader ignores, and checks it (structure and CRC) when the transfer
+ends: it acknowledges the end of the transfer (ACK) only if the pack passed and was put in place of the pack of
+that name, which may be in use; otherwise it deletes the partial file and answers NAK, and nothing changes.
+Packs are not checked again when they are loaded.
+
+A pack is removed with the admin message `delete_file_request` (`/fonts/<name>.mfp`).
