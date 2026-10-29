@@ -3,6 +3,7 @@
 
   upload_pack.py --port /dev/cu.usbmodem101 out/cjk12.mfp
   upload_pack.py --host 10.0.1.2 out/cjk12.mfp --reboot
+  upload_pack.py --port /dev/cu.usbmodem101 --remove cjk12.mfp
 
 The pack goes to /fonts/<name>.mfp. The device loads its packs at boot (until it can reload them by itself, use
 --reboot). Needs the meshtastic Python package.
@@ -54,25 +55,33 @@ def exchange(iface, control, seq=0, data=b""):
 
 
 def check_pack(data):
-    if len(data) < 64 or data[:4] != b"MFPK":
+    if len(data) < 80 or data[:4] != b"MFPK":
         sys.exit("not a font pack")
     version, _, size, crc = struct.unpack_from("<HHII", data, 4)
-    if version != 1 or size != len(data) or zlib.crc32(data[16:]) != crc:
-        sys.exit("the pack is damaged (version, size or CRC)")
+    if version != 2:
+        sys.exit("format version %d: the firmware reads version 2 (rebuild the pack with mkfontpack.py)" % version)
+    if size != len(data) or zlib.crc32(data[16:]) != crc:
+        sys.exit("the pack is damaged (size or CRC)")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("pack")
+    ap.add_argument("pack", nargs="?")
     ap.add_argument("--port", help="serial port")
     ap.add_argument("--host", help="TCP host (the device's IP address)")
     ap.add_argument("--name", help="file name on the device (default: the pack's file name)")
+    ap.add_argument("--remove", metavar="NAME", help="remove the pack /fonts/NAME from the device instead")
     ap.add_argument("--reboot", action="store_true", help="reboot the device afterwards, so it loads the pack")
     a = ap.parse_args()
 
-    data = open(a.pack, "rb").read()
-    check_pack(data)
-    name = a.name or os.path.basename(a.pack)
+    if a.remove:
+        name = a.remove
+    elif a.pack:
+        data = open(a.pack, "rb").read()
+        check_pack(data)
+        name = a.name or os.path.basename(a.pack)
+    else:
+        sys.exit("give a pack to install, or --remove NAME")
     if not name.endswith(".mfp") or "/" in name:
         sys.exit("the name must be a plain file name ending in .mfp")
     target = "/fonts/" + name
@@ -86,6 +95,12 @@ def main():
     pub.subscribe(on_xmodem, "meshtastic.xmodempacket")
     C = xmodem_pb2.XModem
     try:
+        if a.remove:
+            # Starting a transfer replaces the file, cancelling it removes it (xmodem.cpp)
+            if exchange(iface, C.SOH, 0, target.encode()) != C.ACK or exchange(iface, C.CAN) != C.ACK:
+                sys.exit("the device didn't remove %s" % target)
+            print("removed", target)
+            return
         reply = exchange(iface, C.SOH, 0, target.encode())
         if reply != C.ACK:
             sys.exit("the device refused %s (%s)" % (target, reply))

@@ -22,41 +22,61 @@ def run(args):
     return None
 
 
+HEADER = "<4sHHIIBBBBBBHIIIIIIIIIIII"
+# Header fields: (offset, size)
+FIELDS = [(8, 4), (20, 1), (21, 1), (22, 2), (24, 4), (28, 4), (32, 4), (36, 4), (40, 4), (44, 4), (48, 4), (52, 4),
+          (56, 4), (60, 4), (64, 4), (68, 4)]
+
+
 def mutations(data, rnd):
     """A corrupted copy of the pack, and what was done."""
     d = bytearray(data)
-    hdr = struct.unpack_from("<4sHHIIBBBBHHIIIIIII", d)
-    ranges_off, glyphs_off = hdr[12], hdr[13]
-    kind = rnd.randrange(7)
+    h = struct.unpack_from(HEADER, d)
+    plane_count, mis, metrics_count, glyph_count, range_count = h[9], h[10], h[11], h[12], h[13]
+    planes_off, ranges_off, rcp_off, metrics_off, glyphs_off, gcp_off = h[14:20]
+
+    def poke(off, n, what):
+        d[off:off + n] = rnd.getrandbits(8 * n).to_bytes(n, "little")
+        return d, what
+
+    kind = rnd.randrange(11)
     if kind == 0:  # a header field set to an extreme value
-        field = rnd.choice([8, 20, 24, 28, 32, 36, 40, 44, 48])
-        value = rnd.choice([0, 1, 0x7FFFFFFF, 0xFFFFFFFF, len(d), len(d) - 1, rnd.getrandbits(32)])
-        size = 2 if field == 20 else 4
-        d[field:field + size] = value.to_bytes(4, "little")[:size]
-        return d, "header +%d = %#x" % (field, value)
-    if kind == 1:  # a range entry with random values
-        i = rnd.randrange(hdr[9])
-        off = ranges_off + i * 12 + rnd.choice([0, 4, 8])
-        d[off:off + 4] = rnd.getrandbits(32).to_bytes(4, "little")
-        return d, "range %d" % i
-    if kind == 2:  # a glyph entry with random values
-        i = rnd.randrange(hdr[11])
-        off = glyphs_off + i * 8
-        d[off:off + 8] = rnd.getrandbits(64).to_bytes(8, "little")
-        return d, "glyph %d" % i
-    if kind == 3:  # truncated
+        off, size = rnd.choice(FIELDS)
+        value = rnd.choice([0, 1, 2, 17, 18, 255, 256, 0xFFFF, 0x7FFFFFFF, 0xFFFFFFFF, len(d), len(d) - 1,
+                            rnd.getrandbits(32)])
+        d[off:off + size] = (value & ((1 << (8 * size)) - 1)).to_bytes(size, "little")
+        return d, "header +%d = %#x" % (off, value)
+    if kind == 1:
+        i = rnd.randrange(plane_count)
+        return poke(planes_off + i * 8 + rnd.choice([0, 4]), rnd.choice([1, 4]), "plane %d" % i)
+    if kind == 2:
+        i = rnd.randrange(range_count)
+        return poke(ranges_off + i * 3 + rnd.choice([0, 2]), 1 + rnd.randrange(2), "range %d" % i)
+    if kind == 3:
+        i = rnd.randrange((range_count + 63) // 64)
+        return poke(rcp_off + i * 4, 4, "range checkpoint %d" % i)
+    if kind == 4:
+        i = rnd.randrange(metrics_count)
+        return poke(metrics_off + i * 5 + rnd.randrange(5), 1, "metrics %d" % i)
+    if kind == 5:
+        i = rnd.randrange(glyph_count)
+        return poke(glyphs_off + i * mis, mis, "glyph %d" % i)
+    if kind == 6:
+        i = rnd.randrange((glyph_count + 63) // 64)
+        return poke(gcp_off + i * 4, 4, "glyph checkpoint %d" % i)
+    if kind == 7:  # truncated
         n = rnd.randrange(len(d))
         return d[:n], "truncated to %d" % n
-    if kind == 4:  # random bytes anywhere
+    if kind == 8:  # random bytes anywhere
         for _ in range(rnd.randrange(1, 50)):
             d[rnd.randrange(len(d))] = rnd.getrandbits(8)
         return d, "random bytes"
-    if kind == 5:  # ranges out of order
-        a, b = rnd.randrange(hdr[9]), rnd.randrange(hdr[9])
-        ra, rb = d[ranges_off + a * 12:ranges_off + a * 12 + 12], d[ranges_off + b * 12:ranges_off + b * 12 + 12]
-        d[ranges_off + a * 12:ranges_off + a * 12 + 12], d[ranges_off + b * 12:ranges_off + b * 12 + 12] = rb, ra
+    if kind == 9:  # ranges out of order
+        a, b = rnd.randrange(range_count), rnd.randrange(range_count)
+        ra, rb = d[ranges_off + a * 3:ranges_off + a * 3 + 3], d[ranges_off + b * 3:ranges_off + b * 3 + 3]
+        d[ranges_off + a * 3:ranges_off + a * 3 + 3], d[ranges_off + b * 3:ranges_off + b * 3 + 3] = rb, ra
         return d, "ranges %d and %d swapped" % (a, b)
-    return bytes(rnd.getrandbits(8) for _ in range(rnd.randrange(64, 512))), "garbage"
+    return bytes(rnd.getrandbits(8) for _ in range(rnd.randrange(80, 512))), "garbage"
 
 
 def main():
@@ -70,7 +90,7 @@ def main():
         for n in range(rounds):
             d, what = mutations(data, rnd)
             open(bad, "wb").write(d)
-            for args in (["-i", bad], ["-c", bad], [bad, SAMPLE]):
+            for args in (["-i", bad], ["-c", bad], ["-c", "-n", bad], [bad, SAMPLE], ["-n", bad, SAMPLE]):
                 err = run(args)
                 if err:
                     failures += 1

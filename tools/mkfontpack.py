@@ -7,13 +7,15 @@
 Code points the font doesn't have are left out (and counted). Needs Pillow and fontTools.
 """
 import argparse, datetime, os, struct, sys, zlib
+from collections import Counter
 
 from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont
 
 MAGIC = b"MFPK"
-VERSION = 1
-HEADER_SIZE = 64
+VERSION = 2
+HEADER_SIZE = 80
+CHECKPOINT = 64  # a range or glyph checkpoint every 64 entries
 
 
 def charset(codec, lo, hi, leads=range(0xA1, 0xFF), trails=range(0xA1, 0xFF)):
@@ -66,10 +68,10 @@ def parse_ranges(text):
 
 
 def runs(cps):
-    """Sorted code points as (first, last) runs of consecutive values."""
+    """Sorted code points as (first, last) runs of consecutive values, at most 256 long and within one plane."""
     out = []
     for cp in cps:
-        if out and cp == out[-1][1] + 1:
+        if out and cp == out[-1][1] + 1 and cp - out[-1][0] < 256 and (cp >> 16) == (out[-1][0] >> 16):
             out[-1][1] = cp
         else:
             out.append([cp, cp])
@@ -116,6 +118,7 @@ def main():
     ap.add_argument("--name", help="pack name (default: the output file name)")
     ap.add_argument("--license", default="", help="the font's license, e.g. OFL-1.1")
     ap.add_argument("--source", default="", help="where the font comes from")
+    ap.add_argument("--metric-index-size", type=int, choices=(1, 2), help="force 1- or 2-byte metrics indices (tests)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
@@ -148,53 +151,84 @@ def main():
     line_height = bottom - top + a.line_gap
     baseline = ascent - top
 
+    # Planes, ranges (3 bytes each) and range checkpoints
+    plane_tab = bytearray()
     range_tab = bytearray()
+    range_checkpoints = bytearray()
+    plane = -1
     index = 0
-    for lo, hi in runs(cps):
-        range_tab += struct.pack("<III", lo, hi, index)
+    rs = runs(cps)
+    for i, (lo, hi) in enumerate(rs):
+        if lo >> 16 != plane:
+            plane = lo >> 16
+            plane_tab += struct.pack("<B3xI", plane, i)
+        if i % CHECKPOINT == 0:
+            range_checkpoints += struct.pack("<I", index)
+        range_tab += struct.pack("<HB", lo & 0xFFFF, hi - lo)
         index += hi - lo + 1
-    if len(range_tab) // 12 > 0xFFFF:
-        sys.exit("too many ranges")
 
-    glyph_tab = bytearray()
-    bitmaps = bytearray()
+    # Metrics table (most common first), a metrics index per glyph, glyph checkpoints, bitmaps
+    metrics = []
     for cp, (advance, x, y, w, h, bits) in zip(cps, glyphs):
         y -= top
         if not (0 <= advance <= 255 and w <= 255 and h <= 255 and -128 <= x <= 127 and -128 <= y <= 127):
             sys.exit("U+%04X doesn't fit the glyph fields (advance %d, box %dx%d at %d,%d)" % (cp, advance, w, h, x, y))
-        if len(bitmaps) >= 1 << 24:
-            sys.exit("bitmaps exceed 16 MiB")
-        off = len(bitmaps)
-        glyph_tab += struct.pack("<I", off)[:3] + struct.pack("<BBBbb", advance, w, h, x, y)
-        bitmaps += bits
+        metrics.append((advance, w, h, x, y))
+    distinct = [m for m, _ in Counter(metrics).most_common()]
+    if len(distinct) > 0xFFFF:
+        sys.exit("too many distinct glyph metrics")
+    metric_index_size = 1 if len(distinct) <= 256 else 2
+    if a.metric_index_size:
+        if a.metric_index_size < metric_index_size:
+            sys.exit("%d distinct metrics don't fit 1-byte indices" % len(distinct))
+        metric_index_size = a.metric_index_size
+    metric_index = {m: i for i, m in enumerate(distinct)}
+    metrics_tab = b"".join(struct.pack("<BBBbb", *m) for m in distinct)
+    glyph_tab = bytearray()
+    glyph_checkpoints = bytearray()
+    bitmaps = bytearray()
+    for i, (m, g) in enumerate(zip(metrics, glyphs)):
+        if i % CHECKPOINT == 0:
+            glyph_checkpoints += struct.pack("<I", len(bitmaps))
+        glyph_tab += struct.pack("<B" if metric_index_size == 1 else "<H", metric_index[m])
+        bitmaps += g[5]
 
     name = a.name or os.path.splitext(os.path.basename(a.out))[0]
-    meta = "\n".join([
+    meta_lines = [
         "name=" + name,
         "font=" + os.path.basename(a.font),
         "size=%d" % a.size,
         "license=" + a.license,
         "source=" + a.source,
         "created=" + datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "ranges=" + ",".join(("%04X-%04X" % (lo, hi)) if hi > lo else "%04X" % lo for lo, hi in runs(cps)),
-    ]).encode("utf-8")
+    ]
+    if a.set:
+        meta_lines.append("sets=" + a.set)
+    meta = "\n".join(meta_lines).encode("utf-8")
 
-    ranges_offset = HEADER_SIZE
-    glyphs_offset = ranges_offset + len(range_tab)
-    bitmaps_offset = glyphs_offset + len(glyph_tab)
-    meta_offset = bitmaps_offset + len(bitmaps)
-    file_size = meta_offset + len(meta)
+    parts = [plane_tab, range_tab, range_checkpoints, metrics_tab, glyph_tab, glyph_checkpoints, bitmaps, meta]
+    offsets = []
+    off = HEADER_SIZE
+    for part in parts:
+        offsets.append(off)
+        off += len(part)
+    file_size = off
     max_advance = max((g[0] for g in glyphs), default=0)
 
-    tail = struct.pack("<BBBBHHIIIIIII12x", 1, line_height, baseline, max_advance, len(range_tab) // 12, 0,
-                       len(cps), ranges_offset, glyphs_offset, bitmaps_offset, len(bitmaps), meta_offset, len(meta))
-    body = tail + bytes(range_tab) + bytes(glyph_tab) + bytes(bitmaps) + meta
+    tail = struct.pack("<BBBBBBHIIIIIIIIIIII8x", 1, line_height, baseline, max_advance, len(plane_tab) // 8,
+                       metric_index_size, len(distinct), len(cps), len(rs), offsets[0], offsets[1], offsets[2],
+                       offsets[3], offsets[4], offsets[5], offsets[6], len(bitmaps), offsets[7], len(meta))
+    body = tail + b"".join(bytes(p) for p in parts)
     header = MAGIC + struct.pack("<HHII", VERSION, HEADER_SIZE, file_size, zlib.crc32(body))
+    assert len(header) + len(tail) == HEADER_SIZE
     with open(a.out, "wb") as f:
         f.write(header + body)
 
-    print("%s: %d glyphs (%d not in the font), %d ranges, line height %d, baseline %d, %d bytes"
-          % (a.out, len(cps), missing, len(range_tab) // 12, line_height, baseline, file_size))
+    print("%s: %d glyphs (%d not in the font), %d ranges, %d metrics, line height %d, baseline %d, %d bytes"
+          % (a.out, len(cps), missing, len(rs), len(distinct), line_height, baseline, file_size))
+    print("  ranges %d, glyph table %d, checkpoints %d, metrics %d, bitmaps %d, metadata %d"
+          % (len(plane_tab) + len(range_tab), len(glyph_tab), len(range_checkpoints) + len(glyph_checkpoints),
+             len(metrics_tab), len(bitmaps), len(meta)))
 
 
 if __name__ == "__main__":

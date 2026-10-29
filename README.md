@@ -5,7 +5,7 @@ any device, from font packs installed at run time. Step 1 of the plan: the forma
 
 | Path | What |
 |---|---|
-| `SPEC.md` | The pack format (`.mfp`), version 1 |
+| `SPEC.md` | The pack format (`.mfp`), version 2 |
 | `tools/mkfontpack.py` | Builds a pack from a TrueType/OpenType font: one pixel size, chosen code points |
 | `tools/upload_pack.py` | Installs a pack on a device (USB or TCP) with the protobuf API's XModem transfer, to `/fonts/` |
 | `c/fontpack.h`, `c/fontpack.c` | The reader, plain C99 with no allocation, for the firmware (and this test) |
@@ -25,11 +25,14 @@ python3 tools/upload_pack.py --port /dev/cu.usbmodem101 out/cjk12.mfp   # needs 
 
 The upload needs firmware with font pack support (step 2, below); it runs at about 1.1 KB/s over USB.
 
+Version 2 stores a range in 3 bytes and a glyph in 1 (an index into a table of the distinct glyph metrics), with
+checkpoints every 64 entries: the same packs are 40 to 46% smaller than in version 1.
+
 `mkfontpack.py --help` lists the character sets (`latin1`, `kana`, `hangul-ksx1001`, `hanzi-gb2312`,
 `kanji-jis0208`, `hanzi-big5`...); `--ranges` and `--text` add any code points.
 
 The test pack (Latin-1, CJK punctuation, kana, the 2350 common Hangul syllables and the 6763 GB2312 hanzi at
-12 px) is 9613 glyphs in 320 KB, with 13-pixel lines: the Station G2's small font is 13 pixels high too.
+12 px) is 9613 glyphs in 174 KB, with 13-pixel lines: the Station G2's small font is 13 pixels high too.
 
 ## Firmware
 
@@ -38,7 +41,7 @@ Packs in `/fonts/*.mfp` are loaded at their first use and checked (CRC); text dr
 (messages, node names, notifications...) takes its missing glyphs from them, and a box (tofu) stands for the
 characters no pack has. Message lines wrap between CJK characters.
 
-Next (step 3): replacing and removing packs safely, checking a pack once at install, a faster transfer.
+`upload_pack.py --remove NAME` deletes a pack. Next (step 3): replacing and removing packs that are in use, checking a pack once at install, a faster transfer.
 
 ## Licence
 

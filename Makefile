@@ -5,7 +5,7 @@ FONT = fonts/fusion12/fusion-pixel-12px-proportional-zh_hans.ttf
 FONT_VERSION = 2026.10.25
 FONT_URL = https://github.com/TakWolf/fusion-pixel-font/releases/download/$(FONT_VERSION)/fusion-pixel-font-12px-proportional-ttf-v$(FONT_VERSION).zip
 
-all: out/fpview out/cjk12.mfp
+all: out/fpview out/cjk12.mfp out/astral2.mfp
 
 out/fpview: c/fpview.c c/fontpack.c c/fontpack.h
 	mkdir -p out
@@ -16,6 +16,12 @@ out/cjk12.mfp: tools/mkfontpack.py $(FONT)
 	$(PY) tools/mkfontpack.py --font $(FONT) --size 12 \
 		--set latin1,cjk-punct,kana,hangul-ksx1001,hanzi-gb2312 \
 		--name cjk12 --license OFL-1.1 --source "Fusion Pixel Font 12px (TakWolf)" --out $@
+
+# Test pack for the code points above U+FFFF (4 planes) and 2-byte metrics indices
+out/astral2.mfp: tools/mkfontpack.py $(FONT)
+	$(PY) -c "from fontTools.ttLib import TTFont; print(''.join(chr(c) for c in TTFont('$(FONT)').getBestCmap() if c > 0xFFFF))" > out/astral.txt
+	$(PY) tools/mkfontpack.py --font $(FONT) --size 12 --set ascii,kana --text out/astral.txt --metric-index-size 2 \
+		--name astral2 --license OFL-1.1 --source "Fusion Pixel Font 12px (TakWolf)" --out $@
 
 # The test font (OFL-1.1) is downloaded, not kept in the repository
 $(FONT):

@@ -2,6 +2,7 @@
 //
 //   fpview -i pack.mfp                 header, metadata, CRC
 //   fpview -c pack.mfp                 look up and read every glyph the ranges declare
+//   -n                                 don't copy the metrics table to RAM (the reader then reads it from the file)
 //   fpview [-w 128] [-o out.pbm] pack.mfp "text"   lay the text out on a screen that wide, as text art (and a PBM)
 //   fpview ... pack.mfp -f file.txt    the same with the text of a file
 //
@@ -136,45 +137,54 @@ static int layout(const fp_pack *pack, const char *text, int width)
 
 static int info(const fp_pack *pack, FILE *f)
 {
-    printf("size %u bytes, %u glyphs, %u ranges\n", pack->file_size, pack->glyph_count, pack->range_count);
+    printf("size %u bytes, %u glyphs, %u ranges in %u planes, %u metrics\n", pack->file_size, pack->glyph_count,
+           pack->range_count, pack->plane_count, pack->metrics_count);
     printf("line height %u, baseline %u, max advance %u\n", pack->line_height, pack->baseline, pack->max_advance);
-    printf("bitmaps %u bytes, CRC %08X: %s\n", pack->bitmaps_size, pack->crc32, result_name(fp_verify(pack)));
+    printf("tables: ranges %u, metrics %u, glyphs %u, checkpoints %u; bitmaps %u; metadata %u\n",
+           pack->plane_count * 8 + pack->range_count * 3, fp_metrics_size(pack), pack->glyph_count * pack->metric_index_size,
+           ((pack->range_count + 63) / 64 + (pack->glyph_count + 63) / 64) * 4, pack->bitmaps_size, pack->meta_size);
+    printf("CRC %08X: %s\n", pack->crc32, result_name(fp_verify(pack)));
     if (pack->meta_size) {
         char *meta = calloc(pack->meta_size + 1, 1);
         file_ctx ctx = {f};
-        if (file_read(&ctx, pack->meta_offset, meta, pack->meta_size)) {
-            // The ranges line can be long: shorten it
-            char *r = strstr(meta, "ranges=");
-            if (r && strlen(r) > 100)
-                strcpy(r + 90, "...");
+        if (file_read(&ctx, pack->meta_offset, meta, pack->meta_size))
             printf("%s\n", meta);
-        }
         free(meta);
     }
     return 0;
 }
 
+// Every code point the ranges declare, read from the tables directly (not through the reader)
 static int check(const fp_pack *pack, FILE *f)
 {
     file_ctx ctx = {f};
     uint32_t ok = 0, bad = 0;
-    for (uint32_t r = 0; r < pack->range_count; r++) {
-        uint8_t b[12];
-        if (!file_read(&ctx, pack->ranges_offset + r * 12, b, 12))
-            return 1;
-        uint32_t first = b[0] | b[1] << 8 | b[2] << 16 | (uint32_t)b[3] << 24;
-        uint32_t last = b[4] | b[5] << 8 | b[6] << 16 | (uint32_t)b[7] << 24;
-        for (uint32_t cp = first; cp <= last && cp <= 0x10FFFF; cp++) {
-            fp_glyph g;
-            uint8_t bits[1024];
-            if (fp_find(pack, cp, &g) && fp_read_bitmap(pack, &g, bits, sizeof(bits)))
-                ok++;
-            else
-                bad++;
+    uint8_t planes[17 * 8];
+    if (!file_read(&ctx, pack->planes_offset, planes, pack->plane_count * 8))
+        return 1;
+    for (uint32_t p = 0; p < pack->plane_count; p++) {
+        uint32_t plane = planes[p * 8];
+        uint32_t first = planes[p * 8 + 4] | planes[p * 8 + 5] << 8 | planes[p * 8 + 6] << 16 | (uint32_t)planes[p * 8 + 7] << 24;
+        uint32_t end = pack->range_count;
+        if (p + 1 < pack->plane_count)
+            end = planes[p * 8 + 12] | planes[p * 8 + 13] << 8 | planes[p * 8 + 14] << 16 | (uint32_t)planes[p * 8 + 15] << 24;
+        for (uint32_t r = first; r < end && r < pack->range_count; r++) {
+            uint8_t b[3];
+            if (!file_read(&ctx, pack->ranges_offset + r * 3, b, 3))
+                return 1;
+            uint32_t start = plane << 16 | (uint32_t)(b[0] | b[1] << 8);
+            for (uint32_t cp = start; cp <= start + b[2] && cp <= 0x10FFFF; cp++) {
+                fp_glyph g;
+                uint8_t bits[1024];
+                if (fp_find(pack, cp, &g) && fp_read_bitmap(pack, &g, bits, sizeof(bits)))
+                    ok++;
+                else
+                    bad++;
+            }
         }
     }
     printf("%u glyphs read, %u failed\n", ok, bad);
-    return bad ? 1 : 0;
+    return bad || ok != pack->glyph_count ? 1 : 0;
 }
 
 int main(int argc, char **argv)
@@ -182,6 +192,7 @@ int main(int argc, char **argv)
     int width = 128;
     const char *out = NULL, *path = NULL, *text = NULL, *text_file = NULL;
     char mode = 'v';
+    bool metrics_in_ram = true;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-w") && i + 1 < argc)
             width = atoi(argv[++i]);
@@ -193,13 +204,15 @@ int main(int argc, char **argv)
             mode = 'i';
         else if (!strcmp(argv[i], "-c"))
             mode = 'c';
+        else if (!strcmp(argv[i], "-n"))
+            metrics_in_ram = false;
         else if (!path)
             path = argv[i];
         else
             text = argv[i];
     }
     if (!path || (mode == 'v' && !text && !text_file) || width < 8 || width > 2000) {
-        fprintf(stderr, "usage: fpview [-i | -c] [-w width] [-o out.pbm] pack.mfp [\"text\" | -f file]\n");
+        fprintf(stderr, "usage: fpview [-i | -c] [-n] [-w width] [-o out.pbm] pack.mfp [\"text\" | -f file]\n");
         return 2;
     }
 
@@ -215,6 +228,11 @@ int main(int argc, char **argv)
     fp_result r = fp_open(&pack, file_read, &ctx, size > 0xFFFFFFFFL ? 0xFFFFFFFFu : (uint32_t)size);
     if (r != FP_OK) {
         fprintf(stderr, "%s: %s\n", path, result_name(r));
+        return 1;
+    }
+    static uint8_t metrics[65535 * 5];
+    if (metrics_in_ram && !fp_load_metrics(&pack, metrics, sizeof(metrics))) {
+        fprintf(stderr, "%s: can't read the metrics table\n", path);
         return 1;
     }
     if (mode == 'i')
