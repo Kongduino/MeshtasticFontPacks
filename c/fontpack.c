@@ -53,8 +53,8 @@ fp_result fp_open(fp_pack *pack, fp_read_fn read, void *ctx, uint32_t store_size
     pack->meta_size = rd32(h + 48);
 
     uint32_t size = pack->file_size;
-    if (header_size < FP_HEADER_SIZE || size < header_size || size > store_size || bpp != 1 ||
-        pack->line_height == 0 || pack->range_count == 0 || pack->bitmaps_size >= (1u << 24) ||
+    if (header_size < FP_HEADER_SIZE || size < header_size || size > store_size || bpp != 1 || pack->line_height == 0 ||
+        pack->range_count == 0 || pack->bitmaps_size >= (1u << 24) ||
         !inside(pack->ranges_offset, (uint64_t)pack->range_count * FP_RANGE_SIZE, size) ||
         !inside(pack->glyphs_offset, (uint64_t)pack->glyph_count * FP_GLYPH_SIZE, size) ||
         !inside(pack->bitmaps_offset, pack->bitmaps_size, size) || !inside(pack->meta_offset, pack->meta_size, size))

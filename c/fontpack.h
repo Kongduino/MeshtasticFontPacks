@@ -15,11 +15,11 @@ typedef bool (*fp_read_fn)(void *ctx, uint32_t off, void *buf, uint32_t len);
 
 typedef enum {
     FP_OK = 0,
-    FP_ERR_READ,     // the storage failed
-    FP_ERR_MAGIC,    // not a font pack
-    FP_ERR_VERSION,  // a format version this reader doesn't know
-    FP_ERR_FORMAT,   // a field or a table out of bounds
-    FP_ERR_CRC,      // the content doesn't match its CRC
+    FP_ERR_READ,    // the storage failed
+    FP_ERR_MAGIC,   // not a font pack
+    FP_ERR_VERSION, // a format version this reader doesn't know
+    FP_ERR_FORMAT,  // a field or a table out of bounds
+    FP_ERR_CRC,     // the content doesn't match its CRC
 } fp_result;
 
 typedef struct {
