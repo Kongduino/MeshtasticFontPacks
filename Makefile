@@ -23,6 +23,21 @@ out/astral2.mfp: tools/mkfontpack.py $(FONT)
 	$(PY) tools/mkfontpack.py --font $(FONT) --size 12 --set ascii,kana --text out/astral.txt --metric-index-size 2 \
 		--name astral2 --license OFL-1.1 --source "Fusion Pixel Font 12px (TakWolf)" --out $@
 
+# 16 px pack for larger screens (e-ink): GNU Unifont, full CJK (make cjk16)
+UNIFONT_VERSION = 18.0.01
+UNIFONT = fonts/unifont/unifont-$(UNIFONT_VERSION).otf
+CJK_SETS = latin1,cjk-punct,kana,hangul-ksx1001,hanzi-gb2312,hanzi-big5,kanji-jis0208
+
+cjk16: out/cjk16.mfp
+
+out/cjk16.mfp: tools/mkfontpack.py $(UNIFONT)
+	$(PY) tools/mkfontpack.py --font $(UNIFONT) --size 16 --set $(CJK_SETS) --name cjk16 \
+		--license "OFL-1.1 OR GPL-2.0-or-later WITH Font-exception-2.0" --source "GNU Unifont $(UNIFONT_VERSION)" --out $@
+
+$(UNIFONT):
+	mkdir -p fonts/unifont
+	curl -sfL -o $@ https://unifoundry.com/pub/unifont/unifont-$(UNIFONT_VERSION)/font-builds/unifont-$(UNIFONT_VERSION).otf
+
 # The test font (OFL-1.1) is downloaded, not kept in the repository
 $(FONT):
 	mkdir -p fonts out
@@ -36,4 +51,4 @@ test: all
 clean:
 	rm -rf out/*
 
-.PHONY: all test clean
+.PHONY: all test clean cjk16

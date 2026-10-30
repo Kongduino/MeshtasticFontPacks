@@ -18,6 +18,7 @@ any device, from font packs installed at run time. Step 1 of the plan: the forma
 python3 -m venv .venv && .venv/bin/pip install pillow fonttools
 make            # out/fpview and the test pack out/cjk12.mfp (downloads the test font first)
 make test
+make cjk16      # 16 px full CJK pack from GNU Unifont, for larger (e-ink) screens
 out/fpview -i out/cjk12.mfp
 out/fpview -o out/hello.pbm out/cjk12.mfp "你好，世界！こんにちは 안녕하세요"
 python3 tools/upload_pack.py --port /dev/cu.usbmodem101 out/cjk12.mfp   # needs the meshtastic package
@@ -37,17 +38,24 @@ The test pack (Latin-1, CJK punctuation, kana, the 2350 common Hangul syllables 
 
 ## Firmware
 
-Tested on a Station G2: branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`. Text drawn
-through the emote renderer (messages, node names, notifications...) takes the glyphs the built-in font lacks from
-the packs in `/fonts/*.mfp`, and a box (tofu) stands for the characters no pack has. Message lines wrap between
-CJK characters. A pack is checked (CRC) when it is installed and put in place even when the one it replaces is
-in use; an interrupted or damaged upload changes nothing (SPEC.md, "Installing").
+Branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`. Text drawn through the emote renderer
+(messages, node names, notifications...) takes the glyphs the built-in font lacks from the installed packs, and a box
+(tofu) stands for the characters no pack has. Message lines wrap between CJK characters. A pack is checked (CRC) when
+it is installed and put in place even when the one it replaces is in use; an interrupted or damaged upload changes
+nothing (SPEC.md, "Installing").
 
-Next: font pack storage other than files (a `FontStore` write side for flash regions, EEPROM...), more sizes, the
-TFT (LVGL) screens, and a desktop pack builder.
+Packs are kept as files in `/fonts`, or in a board's own storage: the board implements `RawFlash` (read, write,
+erase), and `FlashSlots` keeps one pack per slot. The Nodara (nRF52840) keeps its packs in its 4 MB QSPI flash, in
+3 slots of 1 MB (`QspiRawFlash`).
+
+Tested on a Station G2 (OLED, 12 px pack in LittleFS) and a Nodara (e-ink, 16 px pack in QSPI flash), exchanging
+messages in Chinese (simplified and traditional, Cantonese), Japanese and Korean.
+
+Next: more sizes, the TFT (LVGL) screens, and a desktop pack builder.
 
 ## Licence
 
-GPL-3.0 (see `LICENSE`), like the Meshtastic firmware the reader is meant for. The test font,
-[Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) by TakWolf, is OFL-1.1; `make` downloads it
-into `fonts/` and it isn't part of this repository. A pack made from a font carries that font's licence.
+GPL-3.0 (see `LICENSE`), like the Meshtastic firmware the reader is meant for. The fonts aren't part of this
+repository: `make` downloads them into `fonts/`. [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) by
+TakWolf is OFL-1.1; [GNU Unifont](https://unifoundry.com/unifont/) is OFL-1.1 or GPL-2.0-or-later with the font
+embedding exception. A pack made from a font carries that font's licence.

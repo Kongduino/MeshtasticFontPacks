@@ -143,10 +143,15 @@ A reader treats a pack as untrusted data:
 
 ## Installing (firmware)
 
-A pack is uploaded with the XModem transfer of the protobuf API, to `/fonts/<name>.mfp`. The device receives
-it into `/fonts/<name>.mfp.part`, which the loader ignores, and checks it (structure and CRC) when the transfer
-ends: it acknowledges the end of the transfer (ACK) only if the pack passed and was put in place of the pack of
-that name, which may be in use; otherwise it deletes the partial file and answers NAK, and nothing changes.
-Packs are not checked again when they are loaded.
+A pack is uploaded with the XModem transfer of the protobuf API, to `/fonts/<name>.mfp`, and removed with the admin
+message `delete_file_request` (`/fonts/<name>.mfp`). Where it is stored depends on the board:
 
-A pack is removed with the admin message `delete_file_request` (`/fonts/<name>.mfp`).
+- **Files (default):** the device receives the pack into `/fonts/<name>.mfp.part`, which the loader ignores.
+- **Flash slots:** a board that keeps its packs in a raw storage (an external NOR flash...) divides it into slots. A
+  slot starts with a 4 KB header (magic `MFPS`, version, install counter, size, name, CRC of the header) followed by
+  the pack, which the device writes into a free slot as it arrives. A slot without a valid header is free.
+
+When the transfer ends, the device checks the received pack (structure and CRC). Only if it passes is it put in place
+of the pack of that name, which may be in use: the partial file is renamed, or the slot's header is written and the
+older slot of that name freed. The device then acknowledges the end of the transfer (ACK); otherwise it answers NAK
+and nothing changes. Packs are not checked again when they are loaded.
