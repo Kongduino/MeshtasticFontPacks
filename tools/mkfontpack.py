@@ -48,6 +48,9 @@ SETS = {
     "kanji-jis0208": lambda: charset("euc_jp", 0x4E00, 0x9FFF),        # 6356 Japanese kanji
     # 13061 traditional Chinese (Big5)
     "hanzi-big5": lambda: charset("big5", 0x4E00, 0x9FFF, trails=list(range(0x40, 0x7F)) + list(range(0xA1, 0xFF))),
+    # Hong Kong: the whole Big5-HKSCS repertoire (Big5 plus the HKSCS supplement: Cantonese characters such as 哋 喺,
+    # 1693 of them above U+FFFF)
+    "hkscs": lambda: charset("big5hkscs", 0x20, 0x10FFFF, leads=range(0x81, 0xFF), trails=list(range(0x40, 0x7F)) + list(range(0xA1, 0xFF))),
     "cjk-all": lambda: list(range(0x4E00, 0xA000)),
 }
 
@@ -170,7 +173,8 @@ def main():
     # Metrics table (most common first), a metrics index per glyph, glyph checkpoints, bitmaps
     metrics = []
     for cp, (advance, x, y, w, h, bits) in zip(cps, glyphs):
-        y -= top
+        if w:  # a blank glyph (a space) keeps its offsets at 0
+            y -= top
         if not (0 <= advance <= 255 and w <= 255 and h <= 255 and -128 <= x <= 127 and -128 <= y <= 127):
             sys.exit("U+%04X doesn't fit the glyph fields (advance %d, box %dx%d at %d,%d)" % (cp, advance, w, h, x, y))
         metrics.append((advance, w, h, x, y))

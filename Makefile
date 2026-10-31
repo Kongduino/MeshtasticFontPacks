@@ -26,7 +26,7 @@ out/astral2.mfp: tools/mkfontpack.py $(FONT)
 # 16 px pack for larger screens (e-ink): GNU Unifont, full CJK (make cjk16)
 UNIFONT_VERSION = 18.0.01
 UNIFONT = fonts/unifont/unifont-$(UNIFONT_VERSION).otf
-CJK_SETS = latin1,cjk-punct,kana,hangul-ksx1001,hanzi-gb2312,hanzi-big5,kanji-jis0208
+CJK_SETS = latin1,cjk-punct,kana,hangul-ksx1001,hanzi-gb2312,hanzi-big5,kanji-jis0208,hkscs
 
 cjk16: out/cjk16.mfp
 
@@ -37,6 +37,13 @@ out/cjk16.mfp: tools/mkfontpack.py $(UNIFONT)
 $(UNIFONT):
 	mkdir -p fonts/unifont
 	curl -sfL -o $@ https://unifoundry.com/pub/unifont/unifont-$(UNIFONT_VERSION)/font-builds/unifont-$(UNIFONT_VERSION).otf
+
+# 12 px full CJK pack for small screens (OLED): Fusion Pixel, Hong Kong glyph forms (make cjk12full)
+cjk12full: out/cjk12full.mfp
+
+out/cjk12full.mfp: tools/mkfontpack.py $(FONT)
+	$(PY) tools/mkfontpack.py --font fonts/fusion12/fusion-pixel-12px-proportional-zh_hk.ttf --size 12 --set $(CJK_SETS) \
+		--name cjk12full --license OFL-1.1 --source "Fusion Pixel Font 12px zh_hk (TakWolf)" --out $@
 
 # The test font (OFL-1.1) is downloaded, not kept in the repository
 $(FONT):
@@ -51,4 +58,4 @@ test: all
 clean:
 	rm -rf out/*
 
-.PHONY: all test clean cjk16
+.PHONY: all test clean cjk16 cjk12full

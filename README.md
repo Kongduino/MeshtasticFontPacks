@@ -31,7 +31,11 @@ Version 2 stores a range in 3 bytes and a glyph in 1 (an index into a table of t
 checkpoints every 64 entries: the same packs are 40 to 46% smaller than in version 1.
 
 `mkfontpack.py --help` lists the character sets (`latin1`, `kana`, `hangul-ksx1001`, `hanzi-gb2312`,
-`kanji-jis0208`, `hanzi-big5`...); `--ranges` and `--text` add any code points.
+`kanji-jis0208`, `hanzi-big5`, `hkscs`...); `--ranges` and `--text` add any code points. `make cjk12full` and
+`make cjk16` build full CJK packs (with HKSCS, for Cantonese) at 12 and 16 px.
+
+[FontPackBuilder](https://github.com/Kongduino/FontPackBuilder) is a macOS app that does the same with a glyph editor;
+`tools/export_sets.py` writes the named sets for it, so both select the same characters.
 
 The test pack (Latin-1, CJK punctuation, kana, the 2350 common Hangul syllables and the 6763 GB2312 hanzi at
 12 px) is 9613 glyphs in 174 KB, with 13-pixel lines: the Station G2's small font is 13 pixels high too.

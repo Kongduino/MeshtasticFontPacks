@@ -15,7 +15,8 @@ from meshtastic.protobuf import mesh_pb2, xmodem_pb2
 
 CHUNK = 128  # the XModem buffer of the protobuf API
 RETRIES = 5
-TIMEOUT = 10.0
+TIMEOUT = 3.0  # a packet's reply (an erase can take a few hundred ms)
+END_TIMEOUT = 30.0  # the end of the transfer: the device checks the whole pack first
 
 replies = []
 reply_ready = threading.Condition()
@@ -57,7 +58,7 @@ def send(iface, msg):
         iface._sendToRadio(msg)
 
 
-def exchange(iface, control, seq=0, data=b""):
+def exchange(iface, control, seq=0, data=b"", timeout=None):
     """Sends one XModem packet and returns the device's reply (a Control value), None on timeout."""
     msg = mesh_pb2.ToRadio()
     msg.xmodemPacket.control = control
@@ -67,7 +68,7 @@ def exchange(iface, control, seq=0, data=b""):
     with reply_ready:
         replies.clear()
         send(iface, msg)
-        if not reply_ready.wait_for(lambda: replies, TIMEOUT):
+        if not reply_ready.wait_for(lambda: replies, timeout or TIMEOUT):
             return None
         return replies.pop(0)
 
@@ -115,6 +116,9 @@ def main():
     pub.subscribe(on_log, "meshtastic.log.line")
     C = xmodem_pb2.XModem
     try:
+        if os.environ.get("UPLOAD_TIMEOUT"):
+            global TIMEOUT
+            TIMEOUT = float(os.environ["UPLOAD_TIMEOUT"])
         if a.remove:
             # The device closes its packs before deleting the file (AdminModule, FontPacks::remove)
             from meshtastic.protobuf import admin_pb2
@@ -129,23 +133,42 @@ def main():
             sys.exit("the device refused %s (%s)" % (target, reply))
         chunks = [data[i:i + CHUNK] for i in range(0, len(data), CHUNK)]
         start = time.time()
+        lost_acks = 0
+        lost_seqs = []
         for seq, chunk in enumerate(chunks, 1):
+            timed_out = False
             for attempt in range(RETRIES):
                 reply = exchange(iface, C.SOH, seq & 0xFFFF, chunk)
-                if reply == C.ACK:
+                if reply in (C.ACK, C.CAN):  # CAN: the device stopped the transfer, retrying is pointless
                     break
-            else:
+                if reply is None:
+                    timed_out = True
+                elif reply == C.NAK and timed_out:
+                    # The device NAKs a packet it already stored (wrong sequence): it took this one, and its ACK was
+                    # lost on the way back. Go on with the next packet
+                    lost_acks += 1
+                    lost_seqs.append(seq)
+                    reply = C.ACK
+                    break
+            if reply != C.ACK:
                 exchange(iface, C.CAN)
-                sys.exit("packet %d not acknowledged (%s): transfer cancelled" % (seq, reply))
+                hint = ""
+                if reply == C.CAN:
+                    hint = ("\nthe device stopped the transfer (its log says why). If the pack doesn't fit, remove one first "
+                            "(--remove NAME), then upload again")
+                sys.exit("\npacket %d not acknowledged (%s): transfer cancelled%s" % (seq, reply, hint))
             if seq % 50 == 0 or seq == len(chunks):
                 print("\r%s: %d / %d bytes" % (target, min(seq * CHUNK, len(data)), len(data)), end="", flush=True)
         # The device checks the pack (structure, CRC) and installs it before it acknowledges the end
-        reply = exchange(iface, C.EOT)
+        reply = exchange(iface, C.EOT, timeout=END_TIMEOUT)
         if reply == C.NAK:
             sys.exit("\nthe device checked the pack and refused it: nothing changed on the device")
         if reply != C.ACK:
             sys.exit("\nend of transfer not acknowledged (%s)" % reply)
-        print("\n%d bytes in %.0f s" % (len(data), time.time() - start))
+        if lost_seqs and os.environ.get("UPLOAD_DEBUG"):
+            print("\nlost acknowledgements at packets:", lost_seqs)
+        print("\n%d bytes in %.0f s%s" % (len(data), time.time() - start,
+                                         (" (%d lost acknowledgements recovered)" % lost_acks) if lost_acks else ""))
     finally:
         iface.close()
 
