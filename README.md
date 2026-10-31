@@ -49,13 +49,22 @@ it is installed and put in place even when the one it replaces is in use; an int
 nothing (SPEC.md, "Installing").
 
 Packs are kept as files in `/fonts`, or in a board's own storage: the board implements `RawFlash` (read, write,
-erase), and `FlashSlots` keeps one pack per slot. The Nodara (nRF52840) keeps its packs in its 4 MB QSPI flash, in
-3 slots of 1 MB (`QspiRawFlash`).
+erase), and `FlashSlots` keeps one pack per slot. Boards with packs in an nRF52840's QSPI flash (`QspiRawFlash`):
 
-Tested on a Station G2 (OLED, 12 px pack in LittleFS) and a Nodara (e-ink, 16 px pack in QSPI flash), exchanging
-messages in Chinese (simplified and traditional, Cantonese), Japanese and Korean.
+| Board | Flash | Slots |
+|---|---|---|
+| Nodara | 4 MB on board | 3 × 1 MB |
+| WisMesh Pocket v2 with a RAK15001 (env `rak_wismesh_pocket_fontflash`) | 2 MB in slot C | 2 × 1 MB |
+| Elecrow ThinkNode M1 (env `thinknode_m1`, BaseUI) | 2 MB on board (MX25R1635F) | 2 × 1 MB |
 
-Next: more sizes, the TFT (LVGL) screens, and a desktop pack builder.
+Tested on a Station G2 (OLED, 12 px pack in LittleFS), a T-Deck Pro (e-ink, 16 px pack in LittleFS), and the boards
+above (16 px or 12 px packs in QSPI flash), exchanging messages in Chinese (simplified and traditional, Cantonese),
+Japanese and Korean.
+
+[FontPackBuilder](https://github.com/Kongduino/FontPackBuilder) (macOS) builds packs from any font, with a glyph
+editor, and uploads them over USB serial or TCP.
+
+Next: more sizes, the TFT (LVGL) screens, InkHUD, compressed packs.
 
 ## Licence
 
