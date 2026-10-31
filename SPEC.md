@@ -144,7 +144,8 @@ A reader treats a pack as untrusted data:
 ## Installing (firmware)
 
 A pack is uploaded with the XModem transfer of the protobuf API, to `/fonts/<name>.mfp`, and removed with the admin
-message `delete_file_request` (`/fonts/<name>.mfp`). Where it is stored depends on the board:
+message `delete_file_request` (`/fonts/<name>.mfp`); `delete_file_request` of `/fonts` itself removes every pack, files
+and flash slots. Where it is stored depends on the board:
 
 - **Files (default):** the device receives the pack into `/fonts/<name>.mfp.part`, which the loader ignores.
 - **Flash slots:** a board that keeps its packs in a raw storage (an external NOR flash...) divides it into slots. A
