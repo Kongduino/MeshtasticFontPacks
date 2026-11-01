@@ -7,6 +7,11 @@
 
 The pack goes to /fonts/<name>.mfp: the device receives it into a partial file, checks it, then puts it in place
 (replacing a pack of the same name, even in use) and uses it without a reboot. Needs the meshtastic Python package.
+
+  upload_pack.py --port /dev/cu.usbmodem101 out/strokes.msd
+
+A stroke dictionary (STROKES.md) goes to /fonts/strokes.msd, where the firmware's stroke input looks for it; the
+device checks it (CRC) when it opens it.
 """
 import argparse, os, struct, sys, threading, time, zlib
 
@@ -73,9 +78,22 @@ def exchange(iface, control, seq=0, data=b"", timeout=None):
         return replies.pop(0)
 
 
+def check_dict(data):
+    """A stroke dictionary (STROKES.md): magic, version, size and CRC"""
+    if len(data) < 48 or data[:4] != b"MSDK":
+        sys.exit("not a stroke dictionary")
+    version, _, size, crc = struct.unpack_from("<HHII", data, 4)
+    if version != 1:
+        sys.exit("stroke dictionary version %d: the firmware reads version 1" % version)
+    if size != len(data) or zlib.crc32(data[16:]) != crc:
+        sys.exit("the dictionary is damaged (size or CRC)")
+
+
 def check_pack(data):
+    if data[:4] == b"MSDK":
+        return check_dict(data)
     if len(data) < 80 or data[:4] != b"MFPK":
-        sys.exit("not a font pack")
+        sys.exit("not a font pack or a stroke dictionary")
     version, _, size, crc = struct.unpack_from("<HHII", data, 4)
     if version != 2:
         sys.exit("format version %d: the firmware reads version 2 (rebuild the pack with mkfontpack.py)" % version)
@@ -102,8 +120,10 @@ def main():
         name = a.name or os.path.basename(a.pack)
     else:
         sys.exit("give a pack to install, or --remove NAME")
-    if not name.endswith(".mfp") or "/" in name:
-        sys.exit("the name must be a plain file name ending in .mfp")
+    if a.pack and not a.name and name.endswith(".msd"):
+        name = "strokes.msd"  # where the firmware looks for the stroke dictionary
+    if not (name.endswith(".mfp") or name == "strokes.msd") or "/" in name:
+        sys.exit("the name must be a plain file name ending in .mfp, or strokes.msd")
     target = "/fonts/" + name
 
     if a.host:

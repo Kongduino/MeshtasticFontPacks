@@ -46,7 +46,7 @@ The test pack (Latin-1, CJK punctuation, kana, the 2350 common Hangul syllables 
 writing order (五笔画: 横 竖 撇 点 折, keys 1 to 5), simplified and traditional alike. `tools/mkstrokedict.py` builds one
 from stroke tables (one `strokes<TAB>character[<TAB>standards]` per line, strokes as `h s p n z`, standards among
 `hk tw cn`) and ranks the candidates with the Unicode Character Database's Unihan data; `c/strokedict.c` is the
-reader the firmware will use, and `out/sdview` shows its candidates.
+reader the firmware uses, and `out/sdview` shows its candidates.
 
 ```
 make strokes                                  # out/strokes.msd from the mainland (cn) table, Hong Kong forms first
@@ -58,6 +58,11 @@ make test-strokes                             # the C reader against the builder
 The mainland table comes from the English Wiktionary's lists of stroke orders (`tools/wiktionary_strokes.py`, CC
 BY-SA 4.0, which the table and the dictionaries built from it keep): 21,483 characters, a 252 KB dictionary. Hong
 Kong and Taiwan orders are added as tables of the characters where they differ (STROKES.md).
+
+On a device, the dictionary goes to `/fonts/strokes.msd` (`tools/upload_pack.py --port ... out/strokes.msd`), next
+to a font pack that has the characters. On the T-Deck Pro, Alt+Space switches the compose screen to strokes: W E R
+S D (printed 1 to 5) type 横 竖 撇 点 折 and A (printed *) any stroke; the candidates show at the bottom, Space or Enter
+takes the first, Sym+1 to 9 the others, Alt+S and Alt+F page, Backspace removes a stroke and Esc all of them.
 
 ## Firmware
 
