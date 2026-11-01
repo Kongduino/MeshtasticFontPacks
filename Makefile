@@ -46,6 +46,35 @@ out/cjk12full.mfp: tools/mkfontpack.py $(FONT)
 		--name cjk12full --license OFL-1.1 --source "Fusion Pixel Font 12px zh_hk (TakWolf)" --out $@
 
 # The test font (OFL-1.1) is downloaded, not kept in the repository
+# Stroke input (STROKES.md): the reader's viewer, a dictionary, and the reader's test. The stroke table is the
+# mainland one made from Wiktionary (CC BY-SA 4.0); TABLES adds others, e.g. Hong Kong and Taiwan orders:
+#   make strokes        make strokes TABLES="out/strokes-cn.txt hk.txt"        make test-strokes
+UNIHAN_VERSION = 18.0.0
+UNIHAN = fonts/unihan/Unihan-$(UNIHAN_VERSION).zip
+TABLES ?= out/strokes-cn.txt
+PREFER ?= hk,tw,cn
+
+out/sdview: c/sdview.c c/strokedict.c c/strokedict.h c/fontpack.c c/fontpack.h
+	mkdir -p out
+	$(CC) $(CFLAGS) $(SANITIZE) -o $@ c/sdview.c c/strokedict.c c/fontpack.c
+
+strokes: out/strokes.msd
+
+out/strokes.msd: tools/mkstrokedict.py $(UNIHAN) $(TABLES)
+	$(PY) tools/mkstrokedict.py $(addprefix --table ,$(TABLES)) --prefer $(PREFER) --unihan $(UNIHAN) --out $@
+
+# The Wiktionary pages are downloaded once into fonts/wiktionary
+out/strokes-cn.txt: tools/wiktionary_strokes.py
+	mkdir -p out
+	$(PY) tools/wiktionary_strokes.py --cache fonts/wiktionary --out $@
+
+test-strokes: out/sdview $(UNIHAN) out/strokes-cn.txt
+	$(PY) tools/test_strokedict.py --table out/strokes-cn.txt --unihan $(UNIHAN) --sdview out/sdview
+
+$(UNIHAN):
+	mkdir -p fonts/unihan
+	curl -sfL -o $@ https://www.unicode.org/Public/$(UNIHAN_VERSION)/ucd/Unihan.zip
+
 $(FONT):
 	mkdir -p fonts out
 	curl -sL -o out/font.zip $(FONT_URL)
@@ -58,4 +87,4 @@ test: all
 clean:
 	rm -rf out/*
 
-.PHONY: all test clean cjk16 cjk12full
+.PHONY: all test clean cjk16 cjk12full strokes test-strokes

@@ -40,6 +40,25 @@ checkpoints every 64 entries: the same packs are 40 to 46% smaller than in versi
 The test pack (Latin-1, CJK punctuation, kana, the 2350 common Hangul syllables and the 6763 GB2312 hanzi at
 12 px) is 9613 glyphs in 174 KB, with 13-pixel lines: the Station G2's small font is 13 pixels high too.
 
+## Stroke input
+
+[STROKES.md](STROKES.md) specifies a stroke dictionary (`.msd`) for typing Chinese on a device by strokes, in
+writing order (五笔画: 横 竖 撇 点 折, keys 1 to 5), simplified and traditional alike. `tools/mkstrokedict.py` builds one
+from stroke tables (one `strokes<TAB>character[<TAB>standards]` per line, strokes as `h s p n z`, standards among
+`hk tw cn`) and ranks the candidates with the Unicode Character Database's Unihan data; `c/strokedict.c` is the
+reader the firmware will use, and `out/sdview` shows its candidates.
+
+```
+make strokes                                  # out/strokes.msd from the mainland (cn) table, Hong Kong forms first
+out/sdview out/strokes.msd pzpn hszhhspn      # 风狼獄狱…  東鶇
+make strokes TABLES="out/strokes-cn.txt hk.txt" PREFER=hk,tw,cn   # with a table of Hong Kong orders
+make test-strokes                             # the C reader against the builder's reference lookup
+```
+
+The mainland table comes from the English Wiktionary's lists of stroke orders (`tools/wiktionary_strokes.py`, CC
+BY-SA 4.0, which the table and the dictionaries built from it keep): 21,483 characters, a 252 KB dictionary. Hong
+Kong and Taiwan orders are added as tables of the characters where they differ (STROKES.md).
+
 ## Firmware
 
 Branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`. Text drawn through the emote renderer
