@@ -22,8 +22,10 @@ typedef enum {
     SD_ERR_CRC,     // the content doesn't match its CRC
 } sd_result;
 
-// Stroke values: 横 1, 竖 2, 撇 3, 点/捺 4, 折 5
+// Stroke values: 横 1, 竖 2, 撇 3, 点/捺 4, 折 5; and in an input, any one stroke (a wildcard, for a stroke the user
+// isn't sure of, or learned in another order)
 #define SD_STROKE_MAX 5
+#define SD_STROKE_ANY 6
 #define SD_MAX_STROKES 63
 // The most candidates one lookup can page through (skip + max)
 #define SD_MAX_CANDIDATES 64
@@ -51,14 +53,16 @@ sd_result sd_open(sd_dict *dict, sd_read_fn read, void *ctx, uint32_t store_size
 // Checks the CRC (reads the whole dictionary, 256 bytes at a time)
 sd_result sd_verify(const sd_dict *dict);
 
-// The candidates for the first n strokes of a character (values 1 to 5), best first: writes the code points from
-// index skip, at most max of them, into out and returns how many it wrote (0 when none match or the input is
-// invalid). skip + max is limited to SD_MAX_CANDIDATES. *total, when not NULL, gets the number of candidates there
-// are to page through: for inputs of up to top_depth strokes, the top table's (at most top_k); for longer ones,
-// the matching entries
+// The candidates for the first n strokes of a character (values 1 to 5, or SD_STROKE_ANY), best first: writes the
+// code points from index skip, at most max of them, into out and returns how many it wrote (0 when none match or the
+// input is invalid). skip + max is limited to SD_MAX_CANDIDATES. *total, when not NULL, gets the number of
+// candidates there are to page through: for inputs of up to top_depth strokes without a wildcard, the top table's
+// (at most top_k); for the others, the matching entries.
+// A wildcard makes the reader scan every entry that starts with the strokes before it: a leading wildcard scans the
+// whole dictionary
 int sd_lookup(const sd_dict *dict, const uint8_t *strokes, int n, int skip, uint32_t *out, int max, uint32_t *total);
 
-// Stroke letter (h s p n z, or 1 to 5) to value 1 to 5; 0 for anything else
+// Stroke letter (h s p n z, or 1 to 5) to value 1 to 5, a wildcard (? * 6) to SD_STROKE_ANY; 0 for anything else
 uint8_t sd_stroke_value(char c);
 
 #ifdef __cplusplus

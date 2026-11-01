@@ -86,6 +86,11 @@ A character matches an input of strokes s₁…s_k when its sequence starts with
 `rank`, then `code_point`, each character once. For k ≤ `top_depth`, the top table gives the first `top_k`;
 for longer inputs a reader scans the matching entries (the generator reports the longest such range).
 
+An input may contain wildcards: any one stroke, for a stroke the user isn't sure of or learned in another order
+(Hong Kong, Taiwan and mainland orders differ for some characters). A reader finds the entries that start with
+the strokes before the first wildcard, and keeps those that match the whole input; a leading wildcard means
+reading every entry. The top table isn't used for inputs with a wildcard.
+
 ## Metadata
 
 UTF-8 text, one `key=value` per line, not NUL-terminated. Keys the generator writes: `name`, `table` (the stroke

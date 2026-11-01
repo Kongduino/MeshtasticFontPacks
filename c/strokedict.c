@@ -128,6 +128,10 @@ uint8_t sd_stroke_value(char c)
     case 'Z':
     case '5':
         return 5;
+    case '?':
+    case '*':
+    case '6':
+        return SD_STROKE_ANY;
     default:
         return 0;
     }
@@ -141,15 +145,10 @@ typedef struct {
     uint32_t size; // bytes the entry takes
 } entry;
 
-// Reads the entry at off (relative to the entries); false when it's unreadable or malformed
-static bool read_entry(const sd_dict *dict, uint32_t off, entry *e)
+// Decodes an entry from len bytes; false when it's malformed or doesn't fit
+static bool parse_entry(const uint8_t *buf, uint32_t len, entry *e)
 {
-    uint8_t buf[SD_MAX_ENTRY];
-    if (off >= dict->entries_size)
-        return false;
-    uint32_t avail = dict->entries_size - off;
-    uint32_t len = avail < sizeof(buf) ? avail : sizeof(buf);
-    if (!dict->read(dict->ctx, dict->entries_offset + off, buf, len))
+    if (len == 0)
         return false;
     e->n = buf[0];
     if (e->n == 0 || e->n > SD_MAX_STROKES)
@@ -168,6 +167,55 @@ static bool read_entry(const sd_dict *dict, uint32_t off, entry *e)
     e->cp = rd24(buf + 1 + packed);
     e->rank = rd16(buf + 4 + packed);
     return valid_cp(e->cp);
+}
+
+// Reads the entry at off (relative to the entries); false when it's unreadable or malformed
+static bool read_entry(const sd_dict *dict, uint32_t off, entry *e)
+{
+    uint8_t buf[SD_MAX_ENTRY];
+    if (off >= dict->entries_size)
+        return false;
+    uint32_t avail = dict->entries_size - off;
+    uint32_t len = avail < sizeof(buf) ? avail : sizeof(buf);
+    return dict->read(dict->ctx, dict->entries_offset + off, buf, len) && parse_entry(buf, len, e);
+}
+
+// Reads entries in order through a buffer: a scan reads 256 bytes at a time, not one entry
+typedef struct {
+    const sd_dict *dict;
+    uint32_t start; // offset of buf in the entries
+    uint32_t len;   // bytes in buf
+    uint8_t buf[256];
+} scanner;
+
+static bool scan_entry(scanner *s, uint32_t off, entry *e)
+{
+    const sd_dict *dict = s->dict;
+    if (off >= dict->entries_size)
+        return false;
+    bool in_buf = off >= s->start && off < s->start + s->len;
+    bool whole = in_buf && (off - s->start + SD_MAX_ENTRY <= s->len || s->start + s->len == dict->entries_size);
+    if (!whole) {
+        uint32_t avail = dict->entries_size - off;
+        s->len = avail < sizeof(s->buf) ? avail : sizeof(s->buf);
+        s->start = off;
+        if (!dict->read(dict->ctx, dict->entries_offset + off, s->buf, s->len)) {
+            s->len = 0;
+            return false;
+        }
+    }
+    return parse_entry(s->buf + (off - s->start), s->start + s->len - off, e);
+}
+
+// True when the entry matches the whole input, wildcards included
+static bool matches(const entry *e, const uint8_t *strokes, int n)
+{
+    if (e->n < n)
+        return false;
+    for (int i = 0; i < n; i++)
+        if (strokes[i] != SD_STROKE_ANY && strokes[i] != e->strokes[i])
+            return false;
+    return true;
 }
 
 // < 0: the entry comes before every match of the prefix; 0: it matches; > 0: it comes after
@@ -213,7 +261,7 @@ static void keep_best(candidate *list, int *count, int limit, uint32_t cp, uint1
 }
 
 // The offset of the first entry at or after the prefix (entries_size when there's none)
-static bool first_at_or_after(const sd_dict *dict, const uint8_t *prefix, int n, uint32_t *found)
+static bool first_at_or_after(const sd_dict *dict, scanner *s, const uint8_t *prefix, int n, uint32_t *found)
 {
     uint32_t blocks = (dict->entry_count + SD_CHECKPOINT - 1) / SD_CHECKPOINT;
     // The last checkpoint whose entry comes before the prefix: the first match is in its block or the next one
@@ -239,7 +287,7 @@ static bool first_at_or_after(const sd_dict *dict, const uint8_t *prefix, int n,
     }
     for (; index < dict->entry_count; index++) {
         entry e;
-        if (!read_entry(dict, off, &e))
+        if (!scan_entry(s, off, &e))
             return false;
         if (compare(&e, prefix, n) >= 0)
             break;
@@ -255,11 +303,15 @@ int sd_lookup(const sd_dict *dict, const uint8_t *strokes, int n, int skip, uint
         *total = 0;
     if (n < 1 || n > SD_MAX_STROKES || skip < 0 || max < 1 || skip + max > SD_MAX_CANDIDATES)
         return 0;
-    for (int i = 0; i < n; i++)
-        if (strokes[i] < 1 || strokes[i] > SD_STROKE_MAX)
+    int fixed = n; // the strokes before the first wildcard
+    for (int i = 0; i < n; i++) {
+        if (strokes[i] == SD_STROKE_ANY && fixed == n)
+            fixed = i;
+        else if (strokes[i] < 1 || strokes[i] > SD_STROKE_ANY)
             return 0;
+    }
 
-    if (n <= dict->top_depth) {
+    if (fixed == n && n <= dict->top_depth) {
         uint32_t slot = top_slots((uint8_t)(n - 1));
         uint32_t p = 1;
         for (int i = n - 1; i >= 0; i--, p *= 5)
@@ -281,22 +333,27 @@ int sd_lookup(const sd_dict *dict, const uint8_t *strokes, int n, int skip, uint
         return written;
     }
 
-    uint32_t off;
-    if (!first_at_or_after(dict, strokes, n, &off))
+    // The entries that start with the strokes before the first wildcard (all of them for a leading wildcard), and
+    // among them those that match the whole input
+    scanner s = {dict, 0, 0, {0}};
+    uint32_t off = 0;
+    if (fixed > 0 && !first_at_or_after(dict, &s, strokes, fixed, &off))
         return 0;
     candidate best[SD_MAX_CANDIDATES];
     int count = 0, limit = skip + max;
-    uint32_t matches = 0;
+    uint32_t found = 0;
     while (off < dict->entries_size) {
         entry e;
-        if (!read_entry(dict, off, &e) || compare(&e, strokes, n) != 0)
+        if (!scan_entry(&s, off, &e) || compare(&e, strokes, fixed) != 0)
             break;
-        matches++;
-        keep_best(best, &count, limit, e.cp, e.rank);
+        if (matches(&e, strokes, n)) {
+            found++;
+            keep_best(best, &count, limit, e.cp, e.rank);
+        }
         off += e.size;
     }
     if (total)
-        *total = matches;
+        *total = found;
     int written = 0;
     for (int i = skip; i < count; i++)
         out[written++] = best[i].cp;

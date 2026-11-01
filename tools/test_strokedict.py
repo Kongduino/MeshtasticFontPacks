@@ -49,6 +49,14 @@ def main():
     for strokes, _ in sample:
         for d in range(5, len(strokes) + 1):
             inputs.add("".join(letters[s - 1] for s in strokes[:d]))
+    # Wildcards: one or two strokes of a sample sequence replaced by ?, anywhere (a leading one scans everything),
+    # and a few short patterns
+    for strokes, _ in sample[:400]:
+        text = [letters[s - 1] for s in strokes[: rng.randrange(1, len(strokes) + 1)]]
+        for _ in range(rng.randrange(1, 3)):
+            text[rng.randrange(len(text))] = "?"
+        inputs.add("".join(text))
+    inputs.update(["?", "??", "h?", "?h", "s?z", "???????????????????????????????????????????????", "p?p?p"])
     inputs = sorted(inputs)
 
     failures = 0
@@ -61,12 +69,12 @@ def main():
                 f.write(data)
             got = sdview(args.sdview, path, inputs)
             for text in inputs:
-                prefix = tuple(letters.index(c) + 1 for c in text)
+                prefix = msd.parse_input(text)
                 ref = msd.lookup(entries, rank, prefix)
-                if len(prefix) <= depth:
+                if len(prefix) <= depth and None not in prefix:
                     want = (len(ref[:k]), ref[: min(k, LIMIT)])
                 else:
-                    total = sum(1 for s, _ in entries if s[: len(prefix)] == prefix)
+                    total = sum(1 for s, _ in entries if msd.matches(s, prefix))
                     want = (total, ref[:LIMIT])
                 if got.get(text) != want:
                     failures += 1

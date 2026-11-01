@@ -2,7 +2,8 @@
 // use it.
 //
 //   sdview -i dict.msd                   header, metadata, CRC
-//   sdview dict.msd hspn [pzpn 1234 ...]  the candidates for each input (strokes as h s p n z or 1 to 5)
+//   sdview dict.msd hspn [pzpn 1234 ...]  the candidates for each input (strokes as h s p n z or 1 to 5; ? is any
+//                                        stroke)
 //   sdview -p 2 dict.msd hspn            the same, page 2 (pages of 10, as a device would show them)
 //   sdview -a dict.msd hspn              every candidate the reader can page through (up to 64)
 #include "strokedict.h"
@@ -69,7 +70,7 @@ static void put_utf8(uint32_t cp)
 static int usage(void)
 {
     fprintf(stderr, "usage: sdview -i dict.msd\n"
-                    "       sdview [-p page | -a] dict.msd strokes...   (strokes: h s p n z, or 1 to 5)\n");
+                    "       sdview [-p page | -a] dict.msd strokes...   (strokes: h s p n z, or 1 to 5; ? any)\n");
     return 2;
 }
 
@@ -131,7 +132,7 @@ int main(int argc, char **argv)
         for (const char *c = argv[a]; ok && *c; c++)
             ok = (strokes[n++] = sd_stroke_value(*c)) != 0;
         if (!ok || n == 0) {
-            fprintf(stderr, "%s: strokes are h s p n z, or 1 to 5 (at most %d)\n", argv[a], SD_MAX_STROKES);
+            fprintf(stderr, "%s: strokes are h s p n z, or 1 to 5, and ? for any (at most %d)\n", argv[a], SD_MAX_STROKES);
             status = 1;
             continue;
         }

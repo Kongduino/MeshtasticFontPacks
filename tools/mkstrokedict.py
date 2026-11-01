@@ -170,9 +170,19 @@ def slot_index(prefix):
     return base + sum((s - 1) * 5 ** (len(prefix) - 1 - i) for i, s in enumerate(prefix))
 
 
+def matches(strokes, prefix):
+    """True when a sequence starts with the input; None in the input is a wildcard (any one stroke)"""
+    return len(strokes) >= len(prefix) and all(p is None or p == s for p, s in zip(prefix, strokes))
+
+
+def parse_input(text):
+    """Strokes typed as h s p n z or 1 to 5, ? * or 6 for any stroke: a tuple of 1..5 and None"""
+    return tuple(None if c in "?*6" else int(c) if c.isdigit() else LETTERS.index(c) + 1 for c in text)
+
+
 def lookup(entries, rank, prefix):
     """The candidates for a stroke input, best first, each character once (the reference for the C reader)"""
-    found = {cp for strokes, cp in entries if strokes[: len(prefix)] == prefix}
+    found = {cp for strokes, cp in entries if matches(strokes, prefix)}
     return sorted(found, key=lambda cp: (rank[cp], cp))
 
 
@@ -238,7 +248,8 @@ def main():
     ap.add_argument("--name", help="dictionary name (default: the output file name)")
     ap.add_argument("--license", default="", help="the stroke table's license")
     ap.add_argument("--out", help="output .msd file")
-    ap.add_argument("--lookup", action="append", default=[], help="print the candidates for strokes (hspnz or 12345)")
+    ap.add_argument("--lookup", action="append", default=[],
+                    help="print the candidates for strokes (hspnz or 12345, ? for any stroke)")
     args = ap.parse_args()
     if not 1 <= args.top_k <= 64:
         ap.error("--top-k must be 1 to 64")
@@ -254,8 +265,7 @@ def main():
     rank = ranks({cp for _, cp in entries}, uh, prefer[0] != "cn")
 
     for text in args.lookup:
-        prefix = tuple(int(c) if c.isdigit() else LETTERS.index(c) + 1 for c in text)
-        found = lookup(entries, rank, prefix)
+        found = lookup(entries, rank, parse_input(text))
         print(f"{text}: {len(found)} — " + "".join(chr(cp) for cp in found[:40]) + (" …" if len(found) > 40 else ""))
 
     if args.out:
