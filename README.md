@@ -73,8 +73,10 @@ Plain C99, no allocation; `tests/test_hangul.c` checks it against what the phone
 
 It needs a pack with the `hangul` set: all 11,172 syllables and the letters on their own (Compatibility Jamo), 290 KB
 at 16 px. On a device without a keyboard (the Nodara), the on-screen keyboard's `;` key shows 한 and switches to the
-12 keys. Korean input is a build of its own (`-DFONTPACK_INPUT_HANGUL=1 -DFONTPACK_INPUT_STROKES=0`, env `nodara-ko`),
-without the stroke input.
+12 keys. On the T-Deck Pro, Alt+Space switches the compose screen to 한, and the keys printed with a phone keypad's
+digits type the 나랏글 keys: W E R (1 2 3) ㄱ ㄴ ㅏㅓ, S D F (4 5 6) ㄹ ㅁ ㅗㅜ, Z X C (7 8 9) ㅅ ㅇ ㅣ, A (*) 획추가, mic (0)
+ㅡ, Q (#) 쌍자음. Korean input is a build of its own (`-DFONTPACK_INPUT_HANGUL=1 -DFONTPACK_INPUT_STROKES=0`, envs
+`nodara-ko` and `t-deck-pro-ko`), without the stroke input.
 
 ## Firmware
 
