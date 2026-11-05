@@ -64,6 +64,18 @@ to a font pack that has the characters. On the T-Deck Pro, Alt+Space switches th
 S D (printed 1 to 5) type 横 竖 撇 点 折 and A (printed *) any stroke; the candidates show at the bottom, Space or Enter
 takes the first, Sym+1 to 9 the others, Alt+S and Alt+F page, Backspace removes a stroke and Esc all of them.
 
+## Korean input
+
+`c/hangul.c` types Korean with the 나랏글 (Naratgeul) keypad of Samsung phones: 12 keys (ㄱ ㄴ ㅏㅓ / ㄹ ㅁ ㅗㅜ / ㅅ ㅇ
+ㅣ / 획추가 ㅡ 쌍자음), where 획추가 adds a stroke to the letter just typed (ㄴ→ㄷ→ㅌ, ㅇ→ㅎ, ㅏ→ㅑ) and 쌍자음 doubles it
+(ㄱ→ㄲ). Letters build syllables as on the phone, a final consonant moving to the next syllable when a vowel follows.
+Plain C99, no allocation; `tests/test_hangul.c` checks it against what the phone types (`make test`).
+
+It needs a pack with the `hangul` set: all 11,172 syllables and the letters on their own (Compatibility Jamo), 290 KB
+at 16 px. On a device without a keyboard (the Nodara), the on-screen keyboard's `;` key shows 한 and switches to the
+12 keys. Korean input is a build of its own (`-DFONTPACK_INPUT_HANGUL=1 -DFONTPACK_INPUT_STROKES=0`, env `nodara-ko`),
+without the stroke input.
+
 ## Firmware
 
 Branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`. Text drawn through the emote renderer

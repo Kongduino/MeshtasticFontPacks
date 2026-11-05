@@ -17,7 +17,7 @@ DESCRIPTIONS = {
     "greek": "Greek and Coptic",
     "cjk-punct": "CJK punctuation and fullwidth forms",
     "kana": "Hiragana and Katakana",
-    "hangul": "Hangul syllables (all 11172)",
+    "hangul": "Hangul: all 11172 syllables and the letters (Compatibility Jamo)",
     "hangul-ksx1001": "Hangul syllables of KS X 1001 (the 2350 common ones)",
     "hanzi-gb2312": "Simplified Chinese: the hanzi of GB2312",
     "kanji-jis0208": "Japanese: the kanji of JIS X 0208",

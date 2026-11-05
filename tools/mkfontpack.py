@@ -42,7 +42,8 @@ SETS = {
     "greek": lambda: list(range(0x370, 0x400)),
     "cjk-punct": lambda: list(range(0x3000, 0x3040)) + list(range(0xFF00, 0xFFF0)),
     "kana": lambda: list(range(0x3040, 0x3100)),
-    "hangul": lambda: list(range(0xAC00, 0xD7A4)),
+    # All 11172 syllables, and the letters on their own (Compatibility Jamo: keys, and a syllable being typed)
+    "hangul": lambda: list(range(0x3131, 0x318F)) + list(range(0xAC00, 0xD7A4)),
     "hangul-ksx1001": lambda: charset("euc_kr", 0xAC00, 0xD7A3),       # 2350 common syllables
     "hanzi-gb2312": lambda: charset("gb2312", 0x4E00, 0x9FFF),         # 6763 simplified Chinese
     "kanji-jis0208": lambda: charset("euc_jp", 0x4E00, 0x9FFF),        # 6356 Japanese kanji
