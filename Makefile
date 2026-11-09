@@ -45,6 +45,32 @@ out/cjk12full.mfp: tools/mkfontpack.py $(FONT)
 	$(PY) tools/mkfontpack.py --font fonts/fusion12/fusion-pixel-12px-proportional-zh_hk.ttf --size 12 --set $(CJK_SETS) \
 		--name cjk12full --license OFL-1.1 --source "Fusion Pixel Font 12px zh_hk (TakWolf)" --out $@
 
+# 24 px packs for large screens (the T5 E-Paper's 960 x 540): Noto Sans CJK, an outline font, Hong Kong glyph forms for
+# the hanzi and the Korean font for Hangul (make cjk24 hangul24)
+NOTO_VERSION = 2.004
+NOTO_URL = https://github.com/notofonts/noto-cjk/raw/Sans$(NOTO_VERSION)/Sans/OTF
+NOTO_HK = fonts/noto-cjk-hk/NotoSansCJKhk-Regular.otf
+NOTO_KR = fonts/noto-cjk-kr/NotoSansCJKkr-Regular.otf
+
+cjk24: out/cjk24.mfp
+hangul24: out/hangul24.mfp
+
+out/cjk24.mfp: tools/mkfontpack.py $(NOTO_HK)
+	$(PY) tools/mkfontpack.py --font $(NOTO_HK) --size 24 --set cjk-punct,cjk-all --name cjk24 --license OFL-1.1 \
+		--source "Noto Sans CJK HK $(NOTO_VERSION) (github.com/notofonts/noto-cjk)" --out $@
+
+out/hangul24.mfp: tools/mkfontpack.py $(NOTO_KR)
+	$(PY) tools/mkfontpack.py --font $(NOTO_KR) --size 24 --set hangul --name hangul24 --license OFL-1.1 \
+		--source "Noto Sans CJK KR $(NOTO_VERSION) (github.com/notofonts/noto-cjk)" --out $@
+
+$(NOTO_HK):
+	mkdir -p fonts/noto-cjk-hk
+	curl -sfL -o $@ $(NOTO_URL)/TraditionalChineseHK/NotoSansCJKhk-Regular.otf
+
+$(NOTO_KR):
+	mkdir -p fonts/noto-cjk-kr
+	curl -sfL -o $@ $(NOTO_URL)/Korean/NotoSansCJKkr-Regular.otf
+
 # The test font (OFL-1.1) is downloaded, not kept in the repository
 # Stroke input (STROKES.md): the reader's viewer, a dictionary, and the reader's test. The stroke table is the
 # mainland one made from Wiktionary (CC BY-SA 4.0); TABLES adds others, e.g. Hong Kong and Taiwan orders:
@@ -87,4 +113,4 @@ test: all
 clean:
 	rm -rf out/*
 
-.PHONY: all test clean cjk16 cjk12full strokes test-strokes
+.PHONY: all test clean cjk16 cjk12full cjk24 hangul24 strokes test-strokes
