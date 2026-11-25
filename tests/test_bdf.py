@@ -64,6 +64,12 @@ def main():
         assert mkfontpack.jisx0208_to_unicode(0x2422) == 0x3042
         assert mkfontpack.jisx0208_to_unicode(0x2F21) is None  # an unassigned row
         assert mkfontpack.jisx0201_to_unicode(0x5C) == 0xA5 and mkfontpack.jisx0201_to_unicode(0xDF) == 0xFF9F
+        # The JIS wave dash also answers for the Windows code point U+FF5E, which many keyboards type
+        assert mkfontpack.jisx0208_to_unicode(0x2141) == 0x301C and mkfontpack.jisx0208_windows_alias(0x2141) == 0xFF5E
+        assert mkfontpack.jisx0208_windows_alias(0x2422) is None
+        dash = write("dash.bdf", bdf("JISX0208.1990", "0", {0x2141: kana_kanji[0x3042]}))
+        glyphs, _ = mkfontpack.load_bdf(dash)
+        assert glyphs[0x301C] == glyphs[0xFF5E] == want[0x3042]
 
         # Merged JIS fonts make a pack the reader accepts, and the first font wins a shared character
         pack = os.path.join(tmp, "merged.mfp")

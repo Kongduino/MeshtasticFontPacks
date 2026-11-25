@@ -45,7 +45,8 @@ BDF bitmap fonts are copied pixel for pixel, Unicode (ISO10646), JIS X 0208 or J
 repeated to merge several, the first font with a character winning. Japanese bitmap fonts that work this way:
 [k8x12](https://littlelimit.net/k8x12.htm) (8 x 12, JIS level 1 and 2, made for small screens, 90 KB),
 [Misaki](https://littlelimit.net/misaki.htm) (8 x 8) and Shinonome (12, 14, 16 px, JIS-encoded: give the kanji font, then
-the JIS X 0201 one for half-width katakana).
+the JIS X 0201 one for half-width katakana). JIS-encoded glyphs whose Windows code point differs, such as the wave
+dash (U+301C, and U+FF5E on Windows), are filed under both.
 
 ```
 tools/mkfontpack.py --font k8x12.bdf --size 12 --set latin1,cjk-punct,kana,kanji-jis0208 --ranges FF61-FF9F \
