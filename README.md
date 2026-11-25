@@ -12,6 +12,11 @@ any device, from font packs installed at run time. Step 1 of the plan: the forma
 | `c/fpview.c` | Desktop test: pack info, a full read, text laid out on a screen of a given width |
 | `tests/` | UTF-8 decoder tests, and a corruption test (bad packs must never crash the reader) |
 
+The work is in three repositories: this one (the format, the tools, the reader);
+[meshtastic-fontpacks](https://github.com/Kongduino/meshtastic-fontpacks), the firmware (branch `font-packs`), with
+builds for several boards in its [releases](https://github.com/Kongduino/meshtastic-fontpacks/releases); and
+[FontPackBuilder](https://github.com/Kongduino/FontPackBuilder), the app that makes and uploads packs.
+
 ## Use
 
 ```
@@ -78,18 +83,26 @@ swipes move the highlight. Its `;` key shows 筆 and switches to the stroke pad 
 Plain C99, no allocation; `tests/test_hangul.c` checks it against what the phone types (`make test`).
 
 It needs a pack with the `hangul` set: all 11,172 syllables and the letters on their own (Compatibility Jamo), 290 KB
-at 16 px. On a device without a keyboard (the Nodara), the on-screen keyboard's `;` key shows 한 and switches to the
-12 keys. On the T-Deck Pro, Alt+Space switches the compose screen to 한, and the keys printed with a phone keypad's
+at 16 px. On a device without a keyboard (the Nodara), the on-screen keyboard's mode key (`;`) shows 한 and switches to
+the 12 keys. On the T-Deck Pro, Alt+Space switches the compose screen to 한, and the keys printed with a phone keypad's
 digits type the 나랏글 keys: W E R (1 2 3) ㄱ ㄴ ㅏㅓ, S D F (4 5 6) ㄹ ㅁ ㅗㅜ, Z X C (7 8 9) ㅅ ㅇ ㅣ, A (*) 획추가, mic (0)
-ㅡ, Q (#) 쌍자음. On the T5 E-Paper's touch screen, the 12 keys are tapped (any of a key's three cells). Korean input is a
-build of its own (`-DFONTPACK_INPUT_HANGUL=1 -DFONTPACK_INPUT_STROKES=0`, envs `nodara-ko`, `t-deck-pro-ko` and
-`t5s3-epaper-v2-ko`), without the stroke input.
+ㅡ, Q (#) 쌍자음. On the T5 E-Paper's touch screen, the 12 keys are tapped (any of a key's three cells).
+
+## Input modes
+
+Every build has both input methods, and each shows only when what it needs is installed: strokes with
+`/fonts/strokes.msd`, 한 with a pack that has Hangul. The mode key (`;` on the on-screen keyboard, Alt+Space on the
+T-Deck Pro) goes from the letters to 筆, then 한, then back to the letters, skipping a mode that isn't installed. A
+board short of flash can leave one out (`-DFONTPACK_INPUT_STROKES=0` or `-DFONTPACK_INPUT_HANGUL=0`).
 
 ## Firmware
 
-Branch `font-packs` of the Meshtastic firmware, `src/graphics/fontpack/`. Text drawn through the emote renderer
+Branch `font-packs` of [meshtastic-fontpacks](https://github.com/Kongduino/meshtastic-fontpacks), a fork of the
+Meshtastic firmware, `src/graphics/fontpack/`. Text drawn through the emote renderer
 (messages, node names, notifications...) takes the glyphs the built-in font lacks from the installed packs, and a box
-(tofu) stands for the characters no pack has. Message lines wrap between CJK characters. A pack is checked (CRC) when
+(tofu) stands for the characters no pack has. Message lines wrap between CJK characters, following the CJK
+line-breaking rules (kinsoku): no line starts with closing punctuation, a small kana or the long-vowel mark, and none
+ends with an opening bracket. A pack is checked (CRC) when
 it is installed and put in place even when the one it replaces is in use; an interrupted or damaged upload changes
 nothing (SPEC.md, "Installing").
 
@@ -103,14 +116,19 @@ erase), and `FlashSlots` keeps one pack per slot. Boards with packs in an nRF528
 | Elecrow ThinkNode M1 (env `thinknode_m1`, BaseUI) | 2 MB on board (MX25R1635F) | 2 × 1 MB |
 
 Tested on a Station G2 (OLED, 12 px pack in LittleFS), a T-Deck Pro (e-ink, 16 px pack in LittleFS), a LilyGo T5
-E-Paper S3 Pro V2 (960 x 540 e-ink with a touch screen, 24 px packs in LittleFS, envs `t5s3-epaper-v2` and
-`t5s3-epaper-v2-ko`), and the boards above (16 px or 12 px packs in QSPI flash), exchanging messages in Chinese
+E-Paper S3 Pro V2 (960 x 540 e-ink with a touch screen, 24 px packs in LittleFS, env `t5s3-epaper-v2`), and the boards above (16 px or 12 px packs in QSPI flash), exchanging messages in Chinese
 (simplified and traditional, Cantonese), Japanese and Korean.
 
 [FontPackBuilder](https://github.com/Kongduino/FontPackBuilder) (macOS) builds packs from any font, with a glyph
 editor, and uploads them over USB serial or TCP.
 
 Next: more sizes, the TFT (LVGL) screens, InkHUD, compressed packs.
+
+## Credits
+
+The CJK line-breaking rules and their character lists come from
+[meshtastic/firmware#12469](https://github.com/meshtastic/firmware/pull/12469) (Japanese text on OLED displays) by
+[mntszk](https://github.com/mntszk). The fonts are credited under Licence.
 
 ## Licence
 
