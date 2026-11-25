@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Build a Meshtastic Font Pack (.mfp, see SPEC.md) from a TrueType/OpenType font.
+"""Build a Meshtastic Font Pack (.mfp, see SPEC.md) from a TrueType/OpenType font, or a BDF bitmap font.
 
   mkfontpack.py --font F.ttf --size 12 --set kana,hanzi-gb2312 --out pack.mfp
   mkfontpack.py --font F.ttf --size 12 --ranges 3040-30FF,4E00-9FFF --text extra.txt --out pack.mfp
+  mkfontpack.py --font F.bdf --size 12 --set kana,kanji-jis0208 --out pack.mfp
+  mkfontpack.py --font kanji.bdf --font kana-halfwidth.bdf --size 12 --set kanji-jis0208 --ranges FF61-FF9F --out pack.mfp
+
+A BDF font's pixels are copied as they are (its size must be the pixel size given). BDF fonts may be Unicode
+(ISO10646), JIS X 0208 or JIS X 0201 encoded; several can be given, and the first one with a character wins.
 
 Code points the font doesn't have are left out (and counted). Needs Pillow and fontTools.
 """
@@ -109,9 +114,88 @@ def render(font, cp):
     return advance, l + ink[0], t + ink[1], w, h, bytes(bits)
 
 
+def jisx0208_to_unicode(code):
+    """A JIS X 0208 code (row and cell bytes, 0x2121-0x7E7E) as a Unicode code point, or None."""
+    try:
+        return ord(bytes(((code >> 8) | 0x80, (code & 0xFF) | 0x80)).decode("euc_jp"))
+    except (UnicodeDecodeError, TypeError, ValueError):
+        return None
+
+
+def jisx0201_to_unicode(code):
+    """A JIS X 0201 code as a Unicode code point: roman half with yen sign and overline, half-width katakana."""
+    if code == 0x5C:
+        return 0xA5
+    if code == 0x7E:
+        return 0x203E
+    if 0x20 <= code <= 0x7D:
+        return code
+    if 0xA1 <= code <= 0xDF:
+        return 0xFF61 + code - 0xA1
+    return None
+
+
+def load_bdf(path):
+    """A BDF font's glyphs, {code point: render()'s tuple}, and its ascent. Unicode, JIS X 0208 or JIS X 0201."""
+    glyphs, ascent = {}, 0
+    to_unicode = None
+    lines = iter(open(path, encoding="latin-1").read().splitlines())
+    cp = advance = box = None
+    for line in lines:
+        key, _, rest = line.partition(" ")
+        if key == "CHARSET_REGISTRY":
+            registry = rest.strip().strip('"').upper()
+            if "10646" in registry:
+                to_unicode = int
+            elif registry.startswith("JISX0208"):
+                to_unicode = jisx0208_to_unicode
+            elif registry.startswith("JISX0201"):
+                to_unicode = jisx0201_to_unicode
+            else:
+                sys.exit("%s: unsupported BDF encoding %s (use ISO10646, JISX0208 or JISX0201)" % (path, registry))
+        elif key == "FONT_ASCENT":
+            ascent = int(rest)
+        elif key == "ENCODING":
+            if to_unicode is None:
+                sys.exit("%s: no CHARSET_REGISTRY before the glyphs" % path)
+            code = int(rest.split()[0])
+            cp = to_unicode(code) if code >= 0 else None
+        elif key == "DWIDTH":
+            advance = int(rest.split()[0])
+        elif key == "BBX":
+            box = [int(v) for v in rest.split()]
+        elif key == "BITMAP":
+            w, h, xo, yo = box
+            row_bits = (w + 7) // 8 * 8
+            rows = [int(next(lines), 16) for _ in range(h)]
+            px = [[(r >> (row_bits - 1 - x)) & 1 for x in range(w)] for r in rows]
+            if cp is None:
+                continue
+            ys = [y for y in range(h) if any(px[y])]
+            xs = [x for x in range(w) if any(px[y][x] for y in range(h))]
+            if not ys:
+                glyphs.setdefault(cp, (advance, 0, 0, 0, 0, b""))
+                cp = advance = box = None
+                continue
+            x0, y0 = xs[0], ys[0]
+            iw, ih = xs[-1] - x0 + 1, ys[-1] - y0 + 1
+            bits = bytearray((iw * ih + 7) // 8)
+            n = 0
+            for y in range(y0, y0 + ih):
+                for x in range(x0, x0 + iw):
+                    if px[y][x]:
+                        bits[n >> 3] |= 0x80 >> (n & 7)
+                    n += 1
+            # BBX y offset is the box bottom above the baseline; the ink top is counted from the ascender line
+            glyphs.setdefault(cp, (advance, xo + x0, ascent - (yo + h) + y0, iw, ih, bytes(bits)))
+            cp = advance = box = None
+    return glyphs, ascent
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--font", required=True, help="TrueType/OpenType font file")
+    ap.add_argument("--font", required=True, action="append",
+                    help="TrueType/OpenType font file, or a .bdf bitmap font (BDF only: repeat to merge several)")
     ap.add_argument("--index", type=int, default=0, help="font index in a .ttc collection")
     ap.add_argument("--size", type=int, required=True, help="pixel size")
     ap.add_argument("--set", default="", help="named sets, comma-separated: " + ", ".join(SETS))
@@ -138,20 +222,35 @@ def main():
     if not wanted:
         sys.exit("nothing selected: use --set, --ranges or --text")
 
-    cmap = TTFont(a.font, fontNumber=a.index).getBestCmap()
+    if all(f.lower().endswith(".bdf") for f in a.font):
+        bdf, ascent = {}, 0
+        for path in a.font:
+            more, more_ascent = load_bdf(path)
+            for cp, g in more.items():
+                bdf.setdefault(cp, g)
+            ascent = ascent or more_ascent
+        cmap, glyph = bdf, bdf.__getitem__
+    elif len(a.font) > 1:
+        sys.exit("only BDF fonts can be merged: give one TrueType/OpenType font")
+    else:
+        cmap = TTFont(a.font[0], fontNumber=a.index).getBestCmap()
+        font = ImageFont.truetype(a.font[0], a.size, index=a.index)
+        ascent, _ = font.getmetrics()
+
+        def glyph(cp):
+            return render(font, cp)
+
     cps = sorted(cp for cp in wanted if cp in cmap)
     missing = len(wanted) - len(cps)
-    font = ImageFont.truetype(a.font, a.size, index=a.index)
 
-    glyphs = [render(font, cp) for cp in cps]
+    glyphs = [glyph(cp) for cp in cps]
     # The line box comes from reference characters (a few outliers, accents or tall symbols, would make every
     # line taller): their ink extents, else every glyph's. A glyph outside the box gets a negative y_offset or
     # runs past the line height; the firmware clips to the screen
-    ref = [render(font, ord(c)) for c in a.line_ref if ord(c) in cmap]
+    ref = [glyph(ord(c)) for c in a.line_ref if ord(c) in cmap]
     inked = [g for g in ref if g[3]] or [g for g in glyphs if g[3]]
     top = min((g[2] for g in inked), default=0)
     bottom = max((g[2] + g[4] for g in inked), default=a.size)
-    ascent, _ = font.getmetrics()
     line_height = bottom - top + a.line_gap
     baseline = ascent - top
 
@@ -201,7 +300,7 @@ def main():
     name = a.name or os.path.splitext(os.path.basename(a.out))[0]
     meta_lines = [
         "name=" + name,
-        "font=" + os.path.basename(a.font),
+        "font=" + ",".join(os.path.basename(f) for f in a.font),
         "size=%d" % a.size,
         "license=" + a.license,
         "source=" + a.source,
