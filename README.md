@@ -6,7 +6,7 @@ any device, from font packs installed at run time. Step 1 of the plan: the forma
 | Path | What |
 |---|---|
 | `SPEC.md` | The pack format (`.mfp`), version 2 |
-| `tools/mkfontpack.py` | Builds a pack from a TrueType/OpenType font: one pixel size, chosen code points |
+| `tools/mkfontpack.py` | Builds a pack from a TrueType/OpenType font or BDF bitmap fonts: one pixel size, chosen code points |
 | `tools/upload_pack.py` | Installs (or removes) a pack on a device, over USB or TCP, with the protobuf API's XModem transfer |
 | `c/fontpack.h`, `c/fontpack.c` | The reader, plain C99 with no allocation, for the firmware (and this test) |
 | `c/fpview.c` | Desktop test: pack info, a full read, text laid out on a screen of a given width |
@@ -40,6 +40,18 @@ checkpoints every 64 entries: the same packs are 40 to 46% smaller than in versi
 `make cjk16` build full CJK packs (with HKSCS, for Cantonese) at 12 and 16 px. For large screens, `make cjk24` (every
 character of the CJK block, Hong Kong glyph forms, 1.35 MB) and `make hangul24` (all of Hangul, 612 KB) build 24 px packs
 from Noto Sans CJK, an outline font.
+
+BDF bitmap fonts are copied pixel for pixel, Unicode (ISO10646), JIS X 0208 or JIS X 0201 encoded; `--font` can be
+repeated to merge several, the first font with a character winning. Japanese bitmap fonts that work this way:
+[k8x12](https://littlelimit.net/k8x12.htm) (8 x 12, JIS level 1 and 2, made for small screens, 90 KB),
+[Misaki](https://littlelimit.net/misaki.htm) (8 x 8) and Shinonome (12, 14, 16 px, JIS-encoded: give the kanji font, then
+the JIS X 0201 one for half-width katakana). JIS-encoded glyphs whose Windows code point differs, such as the wave
+dash (U+301C, and U+FF5E on Windows), are filed under both.
+
+```
+tools/mkfontpack.py --font k8x12.bdf --size 12 --set latin1,cjk-punct,kana,kanji-jis0208 --ranges FF61-FF9F \
+    --name k8x12 --license "free (k8x12.txt)" --source "k8x12 (Num Kadoma)" --out out/k8x12.mfp
+```
 
 [FontPackBuilder](https://github.com/Kongduino/FontPackBuilder) is a macOS app that does the same with a glyph editor;
 `tools/export_sets.py` writes the named sets for it, so both select the same characters.
