@@ -53,6 +53,11 @@ tools/mkfontpack.py --font k8x12.bdf --size 12 --set latin1,cjk-punct,kana,kanji
     --name k8x12 --license "free (k8x12.txt)" --source "k8x12 (Num Kadoma)" --out out/k8x12.mfp
 ```
 
+The packs above take their kanji from Chinese fonts, so many are drawn the Chinese way. Three Japanese packs (JIS level 1
+and 2, kana, half-width katakana) have Japanese forms: `make k8x12` (the BDF font, 87 KB, for 128 x 64 OLEDs: its kana
+sit well next to the built-in ArialMT_Plain_10), `make ja12` (Fusion Pixel's Japanese variant, 128 KB) and `make ja24`
+(Noto Sans CJK JP, 445 KB, for large screens). All three are in `fontpacks_samples`.
+
 [FontPackBuilder](https://github.com/Kongduino/FontPackBuilder) is a macOS app that does the same with a glyph editor;
 `tools/export_sets.py` writes the named sets for it, so both select the same characters.
 

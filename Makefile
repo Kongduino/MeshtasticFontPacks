@@ -71,6 +71,45 @@ $(NOTO_KR):
 	mkdir -p fonts/noto-cjk-kr
 	curl -sfL -o $@ $(NOTO_URL)/Korean/NotoSansCJKkr-Regular.otf
 
+# Japanese packs, with Japanese glyph forms (the zh packs above draw many kanji the Chinese way): JIS level 1 and 2 kanji,
+# kana, half-width katakana (make ja12 k8x12 ja24)
+#   ja12   Fusion Pixel 12 px, Japanese variant
+#   k8x12  8 x 12 BDF bitmap font made for small screens, copied pixel for pixel; its kana sit well next to the OLED's
+#          ArialMT_Plain_10 (128 x 64 OLEDs)
+#   ja24   Noto Sans CJK JP 24 px, for large screens
+JA_SETS = latin1,cjk-punct,kana,kanji-jis0208
+K8X12_VERSION = 2021-05-05
+K8X12 = fonts/k8x12/k8x12.bdf
+NOTO_JP = fonts/noto-cjk-jp/NotoSansCJKjp-Regular.otf
+
+ja12: out/ja12.mfp
+k8x12: out/k8x12.mfp
+ja24: out/ja24.mfp
+
+out/ja12.mfp: tools/mkfontpack.py $(FONT)
+	$(PY) tools/mkfontpack.py --font fonts/fusion12/fusion-pixel-12px-proportional-ja.ttf --size 12 --set $(JA_SETS) \
+		--name ja12 --license OFL-1.1 --source "Fusion Pixel Font 12px ja (TakWolf)" --out $@
+
+out/k8x12.mfp: tools/mkfontpack.py $(K8X12)
+	$(PY) tools/mkfontpack.py --font $(K8X12) --size 12 --set $(JA_SETS) --name k8x12 \
+		--license "free (k8x12.txt: use, copy and distribute, modified or not)" \
+		--source "k8x12 $(K8X12_VERSION) (Num Kadoma, littlelimit.net)" --out $@
+
+out/ja24.mfp: tools/mkfontpack.py $(NOTO_JP)
+	$(PY) tools/mkfontpack.py --font $(NOTO_JP) --size 24 --set $(JA_SETS) --name ja24 --license OFL-1.1 \
+		--source "Noto Sans CJK JP $(NOTO_VERSION) (github.com/notofonts/noto-cjk)" --out $@
+
+$(K8X12):
+	mkdir -p fonts/k8x12
+	curl -sfL -o fonts/k8x12/k8x12_bdf.zip https://littlelimit.net/arc/k8x12/k8x12_bdf_$(K8X12_VERSION).zip
+	unzip -o -q fonts/k8x12/k8x12_bdf.zip -d fonts/k8x12
+	rm fonts/k8x12/k8x12_bdf.zip
+	touch $@
+
+$(NOTO_JP):
+	mkdir -p fonts/noto-cjk-jp
+	curl -sfL -o $@ $(NOTO_URL)/Japanese/NotoSansCJKjp-Regular.otf
+
 # The test font (OFL-1.1) is downloaded, not kept in the repository
 # Stroke input (STROKES.md): the reader's viewer, a dictionary, and the reader's test. The stroke table is the
 # mainland one made from Wiktionary (CC BY-SA 4.0); TABLES adds others, e.g. Hong Kong and Taiwan orders:
@@ -113,4 +152,4 @@ test: all
 clean:
 	rm -rf out/*
 
-.PHONY: all test clean cjk16 cjk12full cjk24 hangul24 strokes test-strokes
+.PHONY: all test clean cjk16 cjk12full cjk24 hangul24 ja12 k8x12 ja24 strokes test-strokes
