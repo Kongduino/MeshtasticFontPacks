@@ -77,7 +77,9 @@ $(NOTO_KR):
 #   k8x12  8 x 12 BDF bitmap font made for small screens, copied pixel for pixel; its kana sit well next to the OLED's
 #          ArialMT_Plain_10 (128 x 64 OLEDs)
 #   ja24   Noto Sans CJK JP 24 px, for large screens
-JA_SETS = latin1,cjk-punct,kana,kanji-jis0208
+# jis0208 and cp932 together: the kanji, kana and symbols, the NEC/IBM extensions (① ㈱ 髙), and both code points where
+# JIS and Windows disagree (〜 U+301C and ～ U+FF5E, − U+2212 and － U+FF0D). k8x12 takes every character it has
+JA_SETS = latin1,cjk-punct,kana,jis0208,cp932
 K8X12_VERSION = 2021-05-05
 K8X12 = fonts/k8x12/k8x12.bdf
 NOTO_JP = fonts/noto-cjk-jp/NotoSansCJKjp-Regular.otf
@@ -91,7 +93,7 @@ out/ja12.mfp: tools/mkfontpack.py $(FONT)
 		--name ja12 --license OFL-1.1 --source "Fusion Pixel Font 12px ja (TakWolf)" --out $@
 
 out/k8x12.mfp: tools/mkfontpack.py $(K8X12)
-	$(PY) tools/mkfontpack.py --font $(K8X12) --size 12 --set $(JA_SETS) --name k8x12 \
+	$(PY) tools/mkfontpack.py --font $(K8X12) --size 12 --set all --name k8x12 \
 		--license "free (k8x12.txt: use, copy and distribute, modified or not)" \
 		--source "k8x12 $(K8X12_VERSION) (Num Kadoma, littlelimit.net)" --out $@
 

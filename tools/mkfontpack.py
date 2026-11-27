@@ -39,7 +39,16 @@ def charset(codec, lo, hi, leads=range(0xA1, 0xFF), trails=range(0xA1, 0xFF)):
     return sorted(out)
 
 
-# Named sets; a set is a list of code points
+def cp932():
+    """Windows Japanese (CP932): JIS X 0208 plus the NEC and IBM extensions (circled numbers, ㈱, 髙, 﨑...) and
+    half-width katakana; not the user-defined area, which maps to private use code points."""
+    leads = list(range(0x81, 0xA0)) + list(range(0xE0, 0xFD))
+    trails = list(range(0x40, 0x7F)) + list(range(0x80, 0xFD))
+    return [cp for cp in charset("cp932", 0x20, 0x10FFFF, leads, trails) if not 0xE000 <= cp <= 0xF8FF] + list(
+        range(0xFF61, 0xFFA0))
+
+
+# Named sets; a set is a list of code points. "all" (every character in the font) is handled in main()
 SETS = {
     "ascii": lambda: list(range(0x20, 0x7F)),
     "latin1": lambda: list(range(0x20, 0x7F)) + list(range(0xA0, 0x100)),
@@ -52,6 +61,10 @@ SETS = {
     "hangul-ksx1001": lambda: charset("euc_kr", 0xAC00, 0xD7A3),       # 2350 common syllables
     "hanzi-gb2312": lambda: charset("gb2312", 0x4E00, 0x9FFF),         # 6763 simplified Chinese
     "kanji-jis0208": lambda: charset("euc_jp", 0x4E00, 0x9FFF),        # 6356 Japanese kanji
+    # All of JIS X 0208 (6879): the kanji, kana and the symbols Japanese text uses (※ → … “ ” ℃ ○ ★), Greek, Cyrillic,
+    # box drawing
+    "jis0208": lambda: charset("euc_jp", 0x20, 0x10FFFF),
+    "cp932": cp932,                                                    # 7389: JIS X 0208 as Windows has it
     # 13061 traditional Chinese (Big5)
     "hanzi-big5": lambda: charset("big5", 0x4E00, 0x9FFF, trails=list(range(0x40, 0x7F)) + list(range(0xA1, 0xFF))),
     # Hong Kong: the whole Big5-HKSCS repertoire (Big5 plus the HKSCS supplement: Cantonese characters such as 哋 喺,
@@ -218,7 +231,8 @@ def main():
                     help="TrueType/OpenType font file, or a .bdf bitmap font (BDF only: repeat to merge several)")
     ap.add_argument("--index", type=int, default=0, help="font index in a .ttc collection")
     ap.add_argument("--size", type=int, required=True, help="pixel size")
-    ap.add_argument("--set", default="", help="named sets, comma-separated: " + ", ".join(SETS))
+    ap.add_argument("--set", default="",
+                    help="named sets, comma-separated: " + ", ".join(SETS) + ", all (every character in the font)")
     ap.add_argument("--ranges", default="", help="hex code point ranges, e.g. 3040-30FF,4E00")
     ap.add_argument("--text", help="a UTF-8 file: every character in it is included")
     ap.add_argument("--line-gap", type=int, default=1, help="blank pixels between lines (default 1)")
@@ -231,15 +245,19 @@ def main():
     a = ap.parse_args()
 
     wanted = set()
+    every = False
     for name in filter(None, (s.strip() for s in a.set.split(","))):
+        if name == "all":
+            every = True
+            continue
         if name not in SETS:
-            sys.exit("unknown set: %s (known: %s)" % (name, ", ".join(SETS)))
+            sys.exit("unknown set: %s (known: %s, all)" % (name, ", ".join(SETS)))
         wanted.update(SETS[name]())
     wanted.update(parse_ranges(a.ranges))
     if a.text:
         wanted.update(ord(c) for c in open(a.text, encoding="utf-8").read() if ord(c) >= 0x20)
     wanted.discard(0xFEFF)
-    if not wanted:
+    if not wanted and not every:
         sys.exit("nothing selected: use --set, --ranges or --text")
 
     if all(f.lower().endswith(".bdf") for f in a.font):
@@ -260,6 +278,8 @@ def main():
         def glyph(cp):
             return render(font, cp)
 
+    if every:  # the font's characters, not its control codes
+        wanted.update(cp for cp in cmap if cp >= 0x20 and not 0x7F <= cp < 0xA0 and cp != 0xFEFF)
     cps = sorted(cp for cp in wanted if cp in cmap)
     missing = len(wanted) - len(cps)
 
