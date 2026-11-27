@@ -12,5 +12,6 @@ for pack in out/cjk12.mfp out/astral2.mfp; do
     out/fpview -c -n "$pack"
 done
 .venv/bin/python tests/test_bdf.py out/fpview
+.venv/bin/python tests/test_sets.py out/fpview
 .venv/bin/python tests/fuzz.py out/cjk12.mfp "${ROUNDS:-300}"
 .venv/bin/python tests/fuzz.py out/astral2.mfp "${ROUNDS:-300}"

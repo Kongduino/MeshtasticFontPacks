@@ -36,7 +36,8 @@ Version 2 stores a range in 3 bytes and a glyph in 1 (an index into a table of t
 checkpoints every 64 entries: the same packs are 40 to 46% smaller than in version 1.
 
 `mkfontpack.py --help` lists the character sets (`latin1`, `kana`, `hangul-ksx1001`, `hanzi-gb2312`,
-`kanji-jis0208`, `hanzi-big5`, `hkscs`...); `--ranges` and `--text` add any code points. `make cjk12full` and
+`kanji-jis0208`, `jis0208`, `cp932`, `hanzi-big5`, `hkscs`...); `--ranges` and `--text` add any code points, and
+`--set all` takes every character in the font. `make cjk12full` and
 `make cjk16` build full CJK packs (with HKSCS, for Cantonese) at 12 and 16 px. For large screens, `make cjk24` (every
 character of the CJK block, Hong Kong glyph forms, 1.35 MB) and `make hangul24` (all of Hangul, 612 KB) build 24 px packs
 from Noto Sans CJK, an outline font.
@@ -48,14 +49,18 @@ repeated to merge several, the first font with a character winning. Japanese bit
 the JIS X 0201 one for half-width katakana). JIS-encoded glyphs whose Windows code point differs, such as the wave
 dash (U+301C, and U+FF5E on Windows), are filed under both.
 
+For Japanese, `kanji-jis0208` is only the kanji: `jis0208` adds the symbols Japanese text uses (※ → … “ ” ℃ ○ ★, 221
+of them), and `cp932` the Windows extensions (① Ⅰ ㈱ ㌔, IBM kanji such as 髙 﨑). Together they also cover both code
+points where JIS and Windows disagree (〜 U+301C and U+FF5E). A Japanese-only font can simply take `--set all`.
+
 ```
-tools/mkfontpack.py --font k8x12.bdf --size 12 --set latin1,cjk-punct,kana,kanji-jis0208 --ranges FF61-FF9F \
+tools/mkfontpack.py --font k8x12.bdf --size 12 --set all \
     --name k8x12 --license "free (k8x12.txt)" --source "k8x12 (Num Kadoma)" --out out/k8x12.mfp
 ```
 
 The packs above take their kanji from Chinese fonts, so many are drawn the Chinese way. Three Japanese packs (JIS level 1
-and 2, kana, half-width katakana) have Japanese forms: `make k8x12` (the BDF font, 87 KB, for 128 x 64 OLEDs: its kana
-sit well next to the built-in ArialMT_Plain_10), `make ja12` (Fusion Pixel's Japanese variant, 128 KB) and `make ja24`
+and 2 with its symbols, the Windows extensions, kana, half-width katakana) have Japanese forms: `make k8x12` (the BDF font, 90 KB, for 128 x 64 OLEDs: its kana
+sit well next to the built-in ArialMT_Plain_10), `make ja12` (Fusion Pixel's Japanese variant, 136 KB) and `make ja24`
 (Noto Sans CJK JP, 445 KB, for large screens). All three are in `fontpacks_samples`.
 
 [FontPackBuilder](https://github.com/Kongduino/FontPackBuilder) is a macOS app that does the same with a glyph editor;
